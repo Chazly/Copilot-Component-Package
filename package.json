@@ -4,6 +4,27 @@
     "description": "Reusable AI Copilot chat interface component",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
+    "files": [
+        "dist",
+        "src",
+        "README.md"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Chazly/Copilot-Component-Package.git"
+    },
+    "keywords": [
+        "react",
+        "typescript",
+        "copilot",
+        "chat",
+        "ai",
+        "component",
+        "ui",
+        "resizable-layout"
+    ],
+    "author": "Chazly",
+    "license": "MIT",
     "scripts": {
         "build": "tsc",
         "dev": "tsc --watch",
