@@ -2,10 +2,6 @@
 node_modules/
 .pnpm-store/
 
-# Build outputs
-dist/
-build/
-out/
 
 # Environment variables
 .env
@@ -110,4 +106,4 @@ coverage/
 .nyc_output/
 
 # Storybook build outputs
-storybook-static/
+storybook-static/node_modules/
