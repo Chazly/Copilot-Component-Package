@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProviderRegistry } from '../services/BaseProvider';
-import { getApiKey } from '../lib/env';
+import { getApiKeyWithConfig } from '../lib/env';
 // Import and register providers
 import '../services/OllamaProvider';
 import '../services/CustomProvider';
 // Convert copilot config to provider config
 function configToProviderConfig(config) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     const providerConfig = {
         modelProvider: config.modelProvider,
         model: config.model,
@@ -15,9 +15,10 @@ function configToProviderConfig(config) {
     };
     // Handle provider-specific configurations
     if (config.modelProvider === 'openai') {
-        // OpenAI configuration - use proper environment detection
+        // OpenAI configuration - use unified environment detection that checks config first
         try {
-            providerConfig.apiKey = getApiKey();
+            const envConfig = (_a = config.metadata) === null || _a === void 0 ? void 0 : _a.environmentConfig;
+            providerConfig.apiKey = getApiKeyWithConfig(envConfig);
         }
         catch (error) {
             console.error('Failed to get OpenAI API key:', error);
@@ -25,7 +26,7 @@ function configToProviderConfig(config) {
         }
         providerConfig.baseURL = 'https://api.openai.com';
         // Only enable fallback for OpenAI if explicitly configured
-        if (config.performance && ((_b = (_a = config.integrations) === null || _a === void 0 ? void 0 : _a.contextProviders) === null || _b === void 0 ? void 0 : _b['ai-endpoint'])) {
+        if (config.performance && ((_c = (_b = config.integrations) === null || _b === void 0 ? void 0 : _b.contextProviders) === null || _c === void 0 ? void 0 : _c['ai-endpoint'])) {
             providerConfig.enterpriseConfig = {
                 loadBalancing: 'health-based',
                 failover: {
@@ -33,7 +34,7 @@ function configToProviderConfig(config) {
                     fallbackProviders: ['ollama'] // Only if custom endpoint is configured
                 },
                 monitoring: {
-                    metricsEndpoint: (_d = (_c = config.integrations) === null || _c === void 0 ? void 0 : _c.webhooks) === null || _d === void 0 ? void 0 : _d.onMessageSent
+                    metricsEndpoint: (_e = (_d = config.integrations) === null || _d === void 0 ? void 0 : _d.webhooks) === null || _e === void 0 ? void 0 : _e.onMessageSent
                 }
             };
         }
@@ -51,12 +52,12 @@ function configToProviderConfig(config) {
     else if (config.modelProvider.startsWith('custom:')) {
         // Custom provider configuration
         providerConfig.localConfig = {
-            endpoint: ((_g = (_f = (_e = config.integrations) === null || _e === void 0 ? void 0 : _e.contextProviders) === null || _f === void 0 ? void 0 : _f['ai-endpoint']) === null || _g === void 0 ? void 0 : _g.apiEndpoint) || 'localhost',
+            endpoint: ((_h = (_g = (_f = config.integrations) === null || _f === void 0 ? void 0 : _f.contextProviders) === null || _g === void 0 ? void 0 : _g['ai-endpoint']) === null || _h === void 0 ? void 0 : _h.apiEndpoint) || 'localhost',
             protocol: 'https',
             timeout: 30000,
             retryAttempts: 3,
             authentication: {
-                type: ((_k = (_j = (_h = config.integrations) === null || _h === void 0 ? void 0 : _h.contextProviders) === null || _j === void 0 ? void 0 : _j['ai-endpoint']) === null || _k === void 0 ? void 0 : _k.authMethod) || 'none'
+                type: ((_l = (_k = (_j = config.integrations) === null || _j === void 0 ? void 0 : _j.contextProviders) === null || _k === void 0 ? void 0 : _k['ai-endpoint']) === null || _l === void 0 ? void 0 : _l.authMethod) || 'none'
             }
         };
         // Enable enterprise config for custom providers with fallback
@@ -68,7 +69,7 @@ function configToProviderConfig(config) {
                     fallbackProviders: ['ollama']
                 },
                 monitoring: {
-                    metricsEndpoint: (_m = (_l = config.integrations) === null || _l === void 0 ? void 0 : _l.webhooks) === null || _m === void 0 ? void 0 : _m.onMessageSent
+                    metricsEndpoint: (_o = (_m = config.integrations) === null || _m === void 0 ? void 0 : _m.webhooks) === null || _o === void 0 ? void 0 : _o.onMessageSent
                 }
             };
         }

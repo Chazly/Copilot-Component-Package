@@ -1,5 +1,5 @@
 import { ConfigValidationError } from '../types/utils';
-import { validateEnvironment, detectFramework, getApiKey, getDefaultModel } from '../lib/env';
+import { validateEnvironment, detectFramework, getApiKeyWithConfig, getDefaultModel } from '../lib/env';
 import { validateConfig } from '../validation/ConfigValidator';
 export class CopilotConfigBuilder {
     constructor(initialConfig) {
@@ -303,7 +303,9 @@ export class CopilotConfigBuilder {
      * Validates environment configuration
      */
     validateEnvironment() {
-        const envValidation = validateEnvironment();
+        var _a;
+        const envConfig = (_a = this.state.config.metadata) === null || _a === void 0 ? void 0 : _a.environmentConfig;
+        const envValidation = validateEnvironment(envConfig);
         if (!envValidation.isValid) {
             // Store environment validation errors
             this.state.validationErrors.environment = envValidation.errors;
@@ -615,7 +617,7 @@ export class CopilotConfigBuilder {
     }
     // Validation method using the full ConfigValidator
     validateBasic() {
-        var _a;
+        var _a, _b;
         try {
             const configToValidate = this.applyDefaults();
             const fullValidation = validateConfig(configToValidate);
@@ -628,6 +630,7 @@ export class CopilotConfigBuilder {
         catch (error) {
             // Fallback to basic validation if full validation fails
             const errors = [];
+            const warnings = [];
             // Type-safe string validation
             if (typeof this.state.config.name !== 'string' || !this.state.config.name.trim()) {
                 errors.push('name is required');
@@ -653,12 +656,18 @@ export class CopilotConfigBuilder {
             // Environment validation for critical configurations
             if (this.state.config.modelProvider === 'openai') {
                 try {
-                    getApiKey();
+                    // Use the new unified function that checks config first, then environment
+                    const envConfig = (_a = this.state.config.metadata) === null || _a === void 0 ? void 0 : _a.environmentConfig;
+                    getApiKeyWithConfig(envConfig);
                 }
                 catch (apiError) {
                     // Only error if API key is explicitly required
-                    if ((_a = this.state.config.metadata) === null || _a === void 0 ? void 0 : _a.requireApiKey) {
+                    if ((_b = this.state.config.metadata) === null || _b === void 0 ? void 0 : _b.requireApiKey) {
                         errors.push(`OpenAI API key is required but not found: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
+                    }
+                    else {
+                        // Add as warning instead of error if not required
+                        warnings.push(`OpenAI API key not found: ${apiError instanceof Error ? apiError.message : String(apiError)}`);
                     }
                 }
             }
@@ -669,7 +678,7 @@ export class CopilotConfigBuilder {
             return {
                 isValid: errors.length === 0,
                 errors: { general: errors },
-                warnings: []
+                warnings: warnings
             };
         }
     }

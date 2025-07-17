@@ -402,7 +402,8 @@ export class CopilotConfigBuilder {
    * Validates environment configuration
    */
   validateEnvironment(): this {
-    const envValidation = validateEnvironment()
+    const envConfig = this.state.config.metadata?.environmentConfig
+    const envValidation = validateEnvironment(envConfig)
     
     if (!envValidation.isValid) {
       // Store environment validation errors

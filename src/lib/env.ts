@@ -373,7 +373,7 @@ function getFrameworkSpecificGuide(framework: FrameworkType): string {
 /**
  * Validates the current environment configuration
  */
-export function validateEnvironment(): ValidationResult {
+export function validateEnvironment(providedConfig?: { apiKey?: string }): ValidationResult {
   const framework = detectFramework()
   const isClientSide = typeof window !== 'undefined'
   const isServerSide = typeof process !== 'undefined'
@@ -384,9 +384,9 @@ export function validateEnvironment(): ValidationResult {
   const warnings: string[] = []
   let hasApiKey = false
   
-  // Check for API key
+  // Check for API key using unified function
   try {
-    getApiKey()
+    getApiKeyWithConfig(providedConfig)
     hasApiKey = true
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error))
@@ -428,8 +428,9 @@ export function validateEnvironment(): ValidationResult {
 /**
  * Attempts to auto-detect and return complete environment configuration
  * @param options.requireApiKey - Whether to throw error if API key is missing
+ * @param options.providedConfig - Optional config with API key to use instead of environment detection
  */
-export function detectEnvironment(options: { requireApiKey?: boolean } = {}): EnvironmentConfig {
+export function detectEnvironment(options: { requireApiKey?: boolean; providedConfig?: { apiKey?: string } } = {}): EnvironmentConfig {
   const framework = detectFramework()
   const isClientSide = typeof window !== 'undefined'
   const { value: nodeEnv } = getEnvironmentVariable('NODE_ENV')
@@ -439,7 +440,7 @@ export function detectEnvironment(options: { requireApiKey?: boolean } = {}): En
   
   if (options.requireApiKey !== false) {
     try {
-      apiKey = getApiKey()
+      apiKey = getApiKeyWithConfig(options.providedConfig)
     } catch (error) {
       if (options.requireApiKey === true) {
         throw error
@@ -448,7 +449,7 @@ export function detectEnvironment(options: { requireApiKey?: boolean } = {}): En
     }
   } else {
     try {
-      apiKey = getApiKey()
+      apiKey = getApiKeyWithConfig(options.providedConfig)
     } catch {
       apiKey = '' // Permissive mode
     }
