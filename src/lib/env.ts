@@ -7,7 +7,7 @@ export type FrameworkType = 'nextjs' | 'vite' | 'nuxt' | 'sveltekit' | 'remix' |
 
 export interface EnvironmentConfig {
   apiKey: string
-  defaultModel?: string
+  defaultModel: string
   isClientSide: boolean
   framework: FrameworkType
   isProduction: boolean
@@ -27,18 +27,13 @@ export interface ValidationResult {
   }
 }
 
-/**
- * Safely access import.meta.env
- */
-function getImportMetaEnv(): Record<string, any> | undefined {
-  try {
-    if (typeof window !== 'undefined' && (window as any).import?.meta?.env) {
-      return (window as any).import.meta.env
-    }
-    return undefined
-  } catch {
-    return undefined
-  }
+// Types for environment debugging
+interface EnvironmentDebugInfo {
+  attemptedSources: string[]
+  availableKeys: string[]
+  framework: FrameworkType
+  environment: string
+  directAccess: Record<string, boolean>
 }
 
 /**
@@ -52,24 +47,43 @@ function getProcessEnv(): Record<string, string | undefined> {
 }
 
 /**
- * Detects the current framework/build system being used
+ * Safely access import.meta.env (Vite environments)
+ */
+function getImportMetaEnv(): Record<string, string | undefined> | undefined {
+  try {
+    return (globalThis as any).import?.meta?.env as Record<string, string | undefined>
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Enhanced framework detection with multiple Next.js indicators
  */
 export function detectFramework(): FrameworkType {
   const processEnv = getProcessEnv()
   
-  // Check for Next.js
+  // Enhanced Next.js detection
   if (typeof window !== 'undefined') {
     // Client-side detection
     if ((window as any).__NEXT_DATA__) return 'nextjs'
+    if ((window as any).next) return 'nextjs'
   } else {
-    // Server-side detection
+    // Server-side detection with multiple indicators
     if (processEnv.NEXT_RUNTIME) return 'nextjs'
+    if (processEnv.__NEXT_DEV_SCRIPT) return 'nextjs'
+    if (processEnv.NEXT_TELEMETRY_DISABLED !== undefined) return 'nextjs'
+    // Check for Next.js build indicators
+    if (processEnv.npm_package_dependencies_next) return 'nextjs'
   }
 
-  // Check for Vite
+  // Check for Vite with better detection
   const importMetaEnv = getImportMetaEnv()
   if (importMetaEnv) {
-    return 'vite'
+    // Vite-specific indicators
+    if ((importMetaEnv as any).VITE !== undefined) return 'vite'
+    if (typeof (globalThis as any).import?.meta?.hot !== 'undefined') return 'vite'
+    return 'vite' // Any import.meta.env presence usually indicates Vite
   }
 
   // Check for Nuxt
@@ -97,54 +111,148 @@ export function detectFramework(): FrameworkType {
 }
 
 /**
- * Safely attempts to get an environment variable with comprehensive fallback chain
+ * Enhanced environment variable detection with direct access patterns and debugging
  */
-function getEnvironmentVariable(key: string): string | undefined {
-  const processEnv = getProcessEnv()
-  
-  // Try server-side environment variables first (most secure)
-  if (processEnv[key]) return processEnv[key]
-  
-  // Next.js client-side public variables
-  const nextPublicKey = `NEXT_PUBLIC_${key}`
-  if (processEnv[nextPublicKey]) return processEnv[nextPublicKey]
+function getEnvironmentVariable(key: string): { value: string | undefined, debugInfo: EnvironmentDebugInfo } {
+  const attemptedSources: string[] = []
+  const directAccess: Record<string, boolean> = {}
+  let foundValue: string | undefined
 
-  // Try client-side environment variables (Vite, etc.)
-  const importMetaEnv = getImportMetaEnv()
-  if (importMetaEnv) {
-    // Vite environment variables
+  // 1. Try direct process.env access first (most reliable)
+  if (typeof process !== 'undefined' && process.env && (process.env as any)[key]) {
+    foundValue = (process.env as any)[key]
+    attemptedSources.push(`process.env.${key}`)
+    directAccess[`process.env.${key}`] = true
+  }
+
+  // 2. Try Next.js public pattern directly  
+  if (!foundValue && typeof process !== 'undefined' && process.env && (process.env as any)[`NEXT_PUBLIC_${key}`]) {
+    foundValue = (process.env as any)[`NEXT_PUBLIC_${key}`]
+    attemptedSources.push(`process.env.NEXT_PUBLIC_${key}`)
+    directAccess[`process.env.NEXT_PUBLIC_${key}`] = true
+  }
+
+  // 3. Try client-side patterns with multiple access methods
+  if (!foundValue && typeof window !== 'undefined') {
+    const clientSources = [
+      { source: 'window.process?.env', value: (window as any).process?.env?.[key] },
+      { source: 'window.env', value: (window as any).env?.[key] },
+      { source: 'globalThis.process?.env', value: (globalThis as any).process?.env?.[key] }
+    ]
+
+    for (const { source, value } of clientSources) {
+      attemptedSources.push(`${source}.${key}`)
+      if (value) {
+        foundValue = value
+        directAccess[`${source}.${key}`] = true
+        break
+      } else {
+        directAccess[`${source}.${key}`] = false
+      }
+    }
+  }
+
+  // 4. Try Vite patterns
+  if (!foundValue && typeof (globalThis as any).import?.meta?.env !== 'undefined') {
+    const env = (globalThis as any).import.meta.env
     const viteKey = `VITE_${key}`
-    if (importMetaEnv[viteKey]) return importMetaEnv[viteKey]
     
-    // Direct environment variable access in Vite
-    if (importMetaEnv[key]) return importMetaEnv[key]
+    attemptedSources.push(`import.meta.env.VITE_${key}`)
+    attemptedSources.push(`import.meta.env.${key}`)
+    
+    if (env[viteKey]) {
+      foundValue = env[viteKey]
+      directAccess[`import.meta.env.VITE_${key}`] = true
+    } else if (env[key]) {
+      foundValue = env[key]
+      directAccess[`import.meta.env.${key}`] = true
+    } else {
+      directAccess[`import.meta.env.VITE_${key}`] = false
+      directAccess[`import.meta.env.${key}`] = false
+    }
   }
 
-  // Try window-based environment variables (if injected)
-  if (typeof window !== 'undefined' && (window as any).env) {
-    if ((window as any).env[key]) return (window as any).env[key]
+  // 5. Fall back to the original getProcessEnv() method
+  if (!foundValue) {
+    const processEnv = getProcessEnv()
+    const sources = [
+      { key: key, source: `getProcessEnv().${key}` },
+      { key: `NEXT_PUBLIC_${key}`, source: `getProcessEnv().NEXT_PUBLIC_${key}` }
+    ]
+
+    for (const { key: envKey, source } of sources) {
+      attemptedSources.push(source)
+      if (processEnv[envKey]) {
+        foundValue = processEnv[envKey]
+        directAccess[source] = true
+        break
+      } else {
+        directAccess[source] = false
+      }
+    }
   }
 
-  return undefined
+  // 6. Try window-based environment variables (if injected)
+  if (!foundValue && typeof window !== 'undefined' && (window as any).env) {
+    attemptedSources.push(`window.env.${key}`)
+    if ((window as any).env[key]) {
+      foundValue = (window as any).env[key]
+      directAccess[`window.env.${key}`] = true
+    } else {
+      directAccess[`window.env.${key}`] = false
+    }
+  }
+
+  // Collect debug information
+  const processEnv = getProcessEnv()
+  const availableKeys = Object.keys(processEnv).filter(k => k.includes('OPENAI') || k.includes('API'))
+  
+  const debugInfo: EnvironmentDebugInfo = {
+    attemptedSources,
+    availableKeys,
+    framework: detectFramework(),
+    environment: typeof window !== 'undefined' ? 'client-side' : 'server-side',
+    directAccess
+  }
+
+  return { value: foundValue, debugInfo }
 }
 
 /**
- * Gets the OpenAI API key with comprehensive framework support
+ * Unified API key resolution that checks config first, then environment
+ * This fixes the architectural design flaw where provided config was ignored
+ */
+export function getApiKeyWithConfig(providedConfig?: { apiKey?: string }): string {
+  // First, try the provided config (from environmentConfig)
+  if (providedConfig?.apiKey) {
+    return providedConfig.apiKey
+  }
+  
+  // Fall back to environment detection
+  return getApiKey()
+}
+
+/**
+ * Gets the OpenAI API key with comprehensive framework support and enhanced debugging
  * @throws {Error} When API key is not found (critical error)
  */
 export function getApiKey(): string {
   const framework = detectFramework()
   const isClientSide = typeof window !== 'undefined'
   
-  // Try multiple API key patterns
+  // Try multiple API key patterns with enhanced tracking
   const patterns = [
     'OPENAI_API_KEY',
     'OPENAI_KEY',
     'AI_API_KEY'
   ]
 
+  let allDebugInfo: EnvironmentDebugInfo | null = null
+
   for (const pattern of patterns) {
-    const apiKey = getEnvironmentVariable(pattern)
+    const { value: apiKey, debugInfo } = getEnvironmentVariable(pattern)
+    allDebugInfo = debugInfo // Keep last debug info for error reporting
+    
     if (apiKey) {
       // Warn about client-side API key exposure (security warning)
       if (isClientSide && !pattern.includes('PUBLIC')) {
@@ -160,9 +268,17 @@ export function getApiKey(): string {
     }
   }
 
-  // Critical error - API key not found
+  // Enhanced error message with comprehensive debugging info
   const frameworkGuide = getFrameworkSpecificGuide(framework)
-  throw new Error(`OpenAI API key not found. Add one of the following to your environment:\n\n${frameworkGuide}\n\nCurrent framework detected: ${framework}\nEnvironment: ${isClientSide ? 'client-side' : 'server-side'}`)
+  const debugDetails = allDebugInfo ? `
+Debug Information:
+- Attempted sources: ${allDebugInfo.attemptedSources.join(', ')}
+- Available environment keys: ${allDebugInfo.availableKeys.join(', ') || 'none'}
+- Framework detected: ${allDebugInfo.framework}
+- Environment: ${allDebugInfo.environment}
+- Direct access results: ${JSON.stringify(allDebugInfo.directAccess, null, 2)}` : ''
+  
+  throw new Error(`OpenAI API key not found. ${frameworkGuide}${debugDetails}`)
 }
 
 /**
@@ -176,7 +292,7 @@ export function getDefaultModel(): string {
   ]
 
   for (const pattern of patterns) {
-    const model = getEnvironmentVariable(pattern)
+    const { value: model } = getEnvironmentVariable(pattern)
     if (model) return model
   }
 
@@ -185,43 +301,72 @@ export function getDefaultModel(): string {
 }
 
 /**
- * Provides framework-specific environment variable setup guidance
+ * Provides framework-specific environment variable setup guidance with enhanced options
  */
 function getFrameworkSpecificGuide(framework: FrameworkType): string {
+  const baseMessage = `Add one of the following to your environment:\n\n`
+  
   switch (framework) {
     case 'nextjs':
-      return `For Next.js:
+      return baseMessage + `For Next.js:
       Server-side: OPENAI_API_KEY=your-key-here
       Client-side: NEXT_PUBLIC_OPENAI_API_KEY=your-key-here
-      Add to .env.local file`
+      Add to .env.local file
+      
+      Alternative: Use environmentConfig() method:
+      .environmentConfig({ apiKey: 'your-key-here' })`
       
     case 'vite':
-      return `For Vite:
+      return baseMessage + `For Vite:
       VITE_OPENAI_API_KEY=your-key-here
-      Add to .env.local file`
+      Add to .env.local file
+      
+      Alternative: Use environmentConfig() method:
+      .environmentConfig({ apiKey: 'your-key-here' })`
       
     case 'nuxt':
-      return `For Nuxt:
+      return baseMessage + `For Nuxt:
       NUXT_OPENAI_API_KEY=your-key-here
       NUXT_PUBLIC_OPENAI_API_KEY=your-key-here (for client-side)
-      Add to .env file`
+      Add to .env file
+      
+      Alternative: Use environmentConfig() method:
+      .environmentConfig({ apiKey: 'your-key-here' })`
       
     case 'sveltekit':
-      return `For SvelteKit:
+      return baseMessage + `For SvelteKit:
       OPENAI_API_KEY=your-key-here
       PUBLIC_OPENAI_API_KEY=your-key-here (for client-side)
-      Add to .env file`
+      Add to .env file
+      
+      Alternative: Use environmentConfig() method:
+      .environmentConfig({ apiKey: 'your-key-here' })`
       
     case 'remix':
-      return `For Remix:
+      return baseMessage + `For Remix:
       OPENAI_API_KEY=your-key-here
-      Add to .env file`
+      Add to .env file
+      
+      Alternative: Use environmentConfig() method:
+      .environmentConfig({ apiKey: 'your-key-here' })`
+      
+    case 'unknown':
+      return baseMessage + `Framework could not be detected. Try:
+      1. OPENAI_API_KEY=your-key-here (standard)
+      2. NEXT_PUBLIC_OPENAI_API_KEY=your-key-here (Next.js client)
+      3. VITE_OPENAI_API_KEY=your-key-here (Vite)
+      4. Use environmentConfig() method: .environmentConfig({ apiKey: 'your-key-here' })
+      5. Manual framework override: .environmentConfig({ framework: 'nextjs' })
+      6. Check if your framework is supported and environment variables are accessible`
       
     default:
-      return `Generic setup:
+      return baseMessage + `Generic setup:
       OPENAI_API_KEY=your-key-here
       VITE_OPENAI_API_KEY=your-key-here (for Vite-based tools)
-      NEXT_PUBLIC_OPENAI_API_KEY=your-key-here (for Next.js client-side)`
+      NEXT_PUBLIC_OPENAI_API_KEY=your-key-here (for Next.js client-side)
+      
+      Alternative: Use environmentConfig() method:
+      .environmentConfig({ apiKey: 'your-key-here' })`
   }
 }
 
@@ -254,7 +399,7 @@ export function validateEnvironment(): ValidationResult {
 
   // Client-side security warnings
   if (isClientSide && hasApiKey) {
-    const directApiKey = getEnvironmentVariable('OPENAI_API_KEY')
+    const { value: directApiKey } = getEnvironmentVariable('OPENAI_API_KEY')
     if (directApiKey) {
       warnings.push('API key detected in client environment without framework-specific prefix. Consider using server-side configuration.')
     }
@@ -287,7 +432,8 @@ export function validateEnvironment(): ValidationResult {
 export function detectEnvironment(options: { requireApiKey?: boolean } = {}): EnvironmentConfig {
   const framework = detectFramework()
   const isClientSide = typeof window !== 'undefined'
-  const isProduction = getEnvironmentVariable('NODE_ENV') === 'production'
+  const { value: nodeEnv } = getEnvironmentVariable('NODE_ENV')
+  const isProduction = nodeEnv === 'production'
   
   let apiKey: string
   
@@ -323,5 +469,6 @@ export function detectEnvironment(options: { requireApiKey?: boolean } = {}): En
  */
 export function getEnvVar(name: string): string | undefined {
   console.warn(`getEnvVar() is deprecated. Use specific functions like getApiKey() or getDefaultModel() instead.`)
-  return getEnvironmentVariable(name)
+  const { value } = getEnvironmentVariable(name)
+  return value
 } 

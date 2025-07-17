@@ -14,6 +14,7 @@ import {
 import { 
   detectFramework,
   getApiKey,
+  getApiKeyWithConfig,
   validateEnvironment 
 } from '../../../src/lib/env'
 

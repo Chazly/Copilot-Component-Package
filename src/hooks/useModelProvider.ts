@@ -8,7 +8,7 @@ import {
   StreamChunk
 } from '../services/BaseProvider'
 import { AICopilotConfig, NormalizedCopilotConfig } from '../types'
-import { getApiKey } from '../lib/env'
+import { getApiKey, getApiKeyWithConfig } from '../lib/env'
 
 // Import and register providers
 import '../services/OllamaProvider'
@@ -46,9 +46,10 @@ function configToProviderConfig(config: NormalizedCopilotConfig): ProviderConfig
 
   // Handle provider-specific configurations
   if (config.modelProvider === 'openai') {
-    // OpenAI configuration - use proper environment detection
+    // OpenAI configuration - use unified environment detection that checks config first
     try {
-      providerConfig.apiKey = getApiKey()
+      const envConfig = config.metadata?.environmentConfig
+      providerConfig.apiKey = getApiKeyWithConfig(envConfig)
     } catch (error) {
       console.error('Failed to get OpenAI API key:', error)
       providerConfig.apiKey = undefined

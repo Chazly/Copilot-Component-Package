@@ -5,14 +5,19 @@ import { mockLegacyConfig, mockAIConfig, mockResponses } from '../utils/mockData
 import OpenAITest from './OpenAITest'
 import EnvironmentDetectionTest from './EnvironmentDetectionTest'
 import IntegrationTest from './IntegrationTest'
+// Phase 5 Test Components
+import DualValidationTest from './DualValidationTest'
+import IssueReproductionTest from './IssueReproductionTest'
+import UserAcceptanceTest from './UserAcceptanceTest'
 
 export function TestingDashboard() {
-  const [activeTab, setActiveTab] = useState<'components' | 'environment' | 'integration'>('components')
+  const [activeTab, setActiveTab] = useState<'components' | 'environment' | 'integration' | 'phase5'>('components')
 
   const tabs = [
     { id: 'components' as const, label: 'Component Tests', icon: '🧪' },
     { id: 'environment' as const, label: 'Environment Tests', icon: '🌍' },
-    { id: 'integration' as const, label: 'Integration Tests', icon: '🔧' }
+    { id: 'integration' as const, label: 'Integration Tests', icon: '🔧' },
+    { id: 'phase5' as const, label: 'Phase 5 Validation', icon: '🎯' }
   ]
 
   return (
@@ -229,6 +234,15 @@ export function TestingDashboard() {
       {activeTab === 'integration' && (
         <div className="space-y-6">
           <IntegrationTest />
+        </div>
+      )}
+
+      {/* Phase 5 Validation Tab */}
+      {activeTab === 'phase5' && (
+        <div className="space-y-6">
+          <DualValidationTest />
+          <IssueReproductionTest />
+          <UserAcceptanceTest />
         </div>
       )}
     </div>

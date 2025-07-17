@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { 
   detectFramework, 
   getApiKey, 
+  getApiKeyWithConfig,
   getDefaultModel, 
   validateEnvironment,
   type FrameworkType,
@@ -88,6 +89,25 @@ export default function EnvironmentDetectionTest() {
       description: 'Tests security warning for server-side keys on client',
       framework: 'unknown',
       config: { apiKey: 'sk-exposed-server-key' }
+    },
+    // NEW PHASE 5 SCENARIOS
+    {
+      name: 'Config API Key Override',
+      description: 'Tests getApiKeyWithConfig() prioritizes provided config over environment',
+      framework: 'nextjs',
+      config: { apiKey: 'sk-env-key', model: 'gpt-4' }
+    },
+    {
+      name: 'Config Fallback to Environment',
+      description: 'Tests getApiKeyWithConfig() falls back to environment when no config provided',
+      framework: 'vite',
+      config: { apiKey: 'sk-fallback-key', model: 'gpt-3.5-turbo' }
+    },
+    {
+      name: 'Enhanced Error Messages',
+      description: 'Tests that error messages include debugging information',
+      framework: 'unknown',
+      config: { model: 'gpt-4' } // No API key to trigger enhanced error
     }
   ]
 
@@ -102,10 +122,64 @@ export default function EnvironmentDetectionTest() {
           const framework = detectFramework()
           
           let apiKey: string | null = null
-          try {
-            apiKey = getApiKey()
-          } catch (error) {
-            errors.push(`API Key Error: ${error instanceof Error ? error.message : String(error)}`)
+          
+          // Handle different Phase 5 test scenarios
+          if (scenario.name === 'Config API Key Override') {
+            // Test getApiKeyWithConfig() prioritizes config over environment
+            try {
+              const envApiKey = getApiKey() // Environment key
+              const configApiKey = getApiKeyWithConfig({ apiKey: 'sk-config-override-key' }) // Config key should win
+              
+              if (configApiKey === 'sk-config-override-key' && envApiKey === scenario.config.apiKey) {
+                apiKey = configApiKey
+                errors.push(`✅ Config override test passed: Config key (${configApiKey}) overrode environment key (${envApiKey})`)
+              } else {
+                apiKey = null
+                errors.push(`❌ Config override test failed: Expected config key to override environment`)
+              }
+            } catch (error) {
+              errors.push(`Config Override Error: ${error instanceof Error ? error.message : String(error)}`)
+            }
+          } else if (scenario.name === 'Config Fallback to Environment') {
+            // Test getApiKeyWithConfig() falls back to environment when no config provided
+            try {
+              const fallbackApiKey = getApiKeyWithConfig() // Should use environment
+              
+              if (fallbackApiKey === scenario.config.apiKey) {
+                apiKey = fallbackApiKey
+                errors.push(`✅ Fallback test passed: Used environment key (${fallbackApiKey})`)
+              } else {
+                apiKey = null
+                errors.push(`❌ Fallback test failed: Expected to use environment key`)
+              }
+            } catch (error) {
+              errors.push(`Fallback Error: ${error instanceof Error ? error.message : String(error)}`)
+            }
+          } else if (scenario.name === 'Enhanced Error Messages') {
+            // Test enhanced error messages with debugging information
+            try {
+              getApiKey() // Should throw with enhanced error
+              errors.push(`❌ Enhanced error test failed: Expected error to be thrown`)
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error)
+              const hasDebugInfo = errorMessage.includes('Debug Information:')
+              const hasAttemptedSources = errorMessage.includes('Attempted sources:')
+              const hasFrameworkInfo = errorMessage.includes('Framework detected:')
+              
+              if (hasDebugInfo && hasAttemptedSources && hasFrameworkInfo) {
+                errors.push(`✅ Enhanced error test passed: Error includes debug info, sources, and framework info`)
+              } else {
+                errors.push(`❌ Enhanced error test partial: Debug info: ${hasDebugInfo}, Sources: ${hasAttemptedSources}, Framework: ${hasFrameworkInfo}`)
+              }
+              errors.push(`Error message length: ${errorMessage.length} characters`)
+            }
+          } else {
+            // Regular API key test for existing scenarios
+            try {
+              apiKey = getApiKey()
+            } catch (error) {
+              errors.push(`API Key Error: ${error instanceof Error ? error.message : String(error)}`)
+            }
           }
 
           let defaultModel = 'gpt-3.5-turbo'
@@ -119,19 +193,19 @@ export default function EnvironmentDetectionTest() {
           try {
             validation = validateEnvironment()
           } catch (error) {
-                         validation = {
-               isValid: false,
-               framework: framework,
-               hasApiKey: false,
-               warnings: [],
-               errors: [error instanceof Error ? error.message : String(error)],
-               environmentInfo: {
-                 isClient: typeof window !== 'undefined',
-                 isServer: typeof process !== 'undefined',
-                 hasProcessEnv: typeof process !== 'undefined' && !!process.env,
-                 hasImportMeta: !!(globalThis as any).import?.meta?.env
-               }
-             }
+            validation = {
+              isValid: false,
+              framework: framework,
+              hasApiKey: false,
+              warnings: [],
+              errors: [error instanceof Error ? error.message : String(error)],
+              environmentInfo: {
+                isClient: typeof window !== 'undefined',
+                isServer: typeof process !== 'undefined',
+                hasProcessEnv: typeof process !== 'undefined' && !!process.env,
+                hasImportMeta: !!(globalThis as any).import?.meta?.env
+              }
+            }
           }
 
           return {

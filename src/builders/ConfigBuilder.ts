@@ -12,7 +12,7 @@ import {
   StrictValidationResult,
   ValidationErrors
 } from '../types/utils'
-import { validateEnvironment, detectFramework, getApiKey, getDefaultModel } from '../lib/env'
+import { validateEnvironment, detectFramework, getApiKey, getApiKeyWithConfig, getDefaultModel } from '../lib/env'
 import { validateConfig } from '../validation/ConfigValidator'
 
 export class CopilotConfigBuilder {
@@ -749,6 +749,7 @@ export class CopilotConfigBuilder {
     } catch (error) {
       // Fallback to basic validation if full validation fails
       const errors: string[] = []
+      const warnings: string[] = []
       
       // Type-safe string validation
       if (typeof this.state.config.name !== 'string' || !this.state.config.name.trim()) {
@@ -776,11 +777,16 @@ export class CopilotConfigBuilder {
       // Environment validation for critical configurations
       if (this.state.config.modelProvider === 'openai') {
         try {
-          getApiKey()
+          // Use the new unified function that checks config first, then environment
+          const envConfig = this.state.config.metadata?.environmentConfig
+          getApiKeyWithConfig(envConfig)
         } catch (apiError) {
           // Only error if API key is explicitly required
           if (this.state.config.metadata?.requireApiKey) {
             errors.push(`OpenAI API key is required but not found: ${apiError instanceof Error ? apiError.message : String(apiError)}`)
+          } else {
+            // Add as warning instead of error if not required
+            warnings.push(`OpenAI API key not found: ${apiError instanceof Error ? apiError.message : String(apiError)}`)
           }
         }
       }
@@ -793,7 +799,7 @@ export class CopilotConfigBuilder {
       return {
         isValid: errors.length === 0,
         errors: { general: errors },
-        warnings: []
+        warnings: warnings
       }
     }
   }
