@@ -213,10 +213,18 @@ interface ChatMessagesProps {
   avatarUrl?: string
   colors: any
   layout: keyof typeof layoutConfig
+  composer?: {
+    onChoiceSelectBehavior?: 'sendKey' | 'sendText'
+    multiSelect?: boolean
+    selectionLimit?: number
+    submitLabel?: string
+    sendOnSelect?: boolean
+  }
 }
 
-function ChatMessages({ messages, isLoading, showAvatar, avatarUrl, colors, layout }: ChatMessagesProps) {
+function ChatMessages({ messages, isLoading, showAvatar, avatarUrl, colors, layout, composer }: ChatMessagesProps) {
   const styles = layoutConfig[layout]
+  const [selected, setSelected] = React.useState<Record<string, boolean>>({})
   
   // Helper function to detect streaming placeholder messages
   const isStreamingPlaceholder = (message: any) => {
@@ -269,6 +277,74 @@ function ChatMessages({ messages, isLoading, showAvatar, avatarUrl, colors, layo
                   className={styles.messageText}
                   dangerouslySetInnerHTML={{ __html: processMarkdown(message.content) }}
                 />
+              )}
+              {message.choices && message.choices.length > 0 && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {message.choices.map((c: any) => {
+                      const isSelected = !!selected[c.key]
+                      return (
+                        <button
+                          key={c.key}
+                          data-choice-key={c.key}
+                          className={`text-xs px-2 py-1 border rounded transition ${isSelected ? 'bg-gray-300 border-gray-400' : 'border-gray-300 hover:bg-gray-200'}`}
+                          onClick={() => {
+                            const allowMulti = !!composer?.multiSelect
+                            if (allowMulti) {
+                              setSelected(prev => {
+                                const next = { ...prev }
+                                const nextVal = !next[c.key]
+                                // enforce selection limit if provided
+                                const limit = composer?.selectionLimit
+                                if (nextVal && typeof limit === 'number') {
+                                  const count = Object.values(next).filter(Boolean).length
+                                  if (count >= limit) {
+                                    return prev
+                                  }
+                                }
+                                next[c.key] = nextVal
+                                return next
+                              })
+                              if (composer?.sendOnSelect) {
+                                const event = new CustomEvent('copilot-choice-selected', {
+                                  detail: { key: c.key, text: c.text }
+                                })
+                                window.dispatchEvent(event)
+                              }
+                            } else {
+                              const behavior = composer?.onChoiceSelectBehavior || 'sendKey'
+                              const event = new CustomEvent('copilot-choice-selected', {
+                                detail: { key: c.key, text: c.text, behavior }
+                              })
+                              window.dispatchEvent(event)
+                            }
+                          }}
+                        >{c.key}. {c.text}</button>
+                      )
+                    })}
+                  </div>
+                  {composer?.multiSelect && !composer?.sendOnSelect && (
+                    <div className="pt-1">
+                      <button
+                        className="text-xs px-3 py-1 border border-gray-300 rounded hover:bg-gray-200 transition"
+                        onClick={() => {
+                          const selectedKeys = Object.entries(selected).filter(([, v]) => v).map(([k]) => k)
+                          if (selectedKeys.length === 0) return
+                          const selectedChoices = message.choices.filter((c: any) => selectedKeys.includes(c.key))
+                          const behavior = composer?.onChoiceSelectBehavior || 'sendKey'
+                          const payload = behavior === 'sendText'
+                            ? selectedChoices.map((c: any) => `${c.key}. ${c.text}`).join(', ')
+                            : selectedChoices.map((c: any) => c.key).join(', ')
+                          const event = new CustomEvent('copilot-choice-selected', {
+                            detail: { payload }
+                          })
+                          window.dispatchEvent(event)
+                          setSelected({})
+                        }}
+                      >{composer?.submitLabel || 'Submit'}</button>
+                    </div>
+                  )}
+                </div>
               )}
               {message.timestamp && (
                 <div className={`${styles.timestampText} opacity-70 mt-1 ${
@@ -355,6 +431,26 @@ export function CopilotChat({ config, onSendMessage, className }: CopilotChatPro
   const { config: normalizedConfig } = useCopilotConfig(config)
   const configProps = getConfigProperties(config)
   const { messages, input, setInput, sendMsg, isLoading } = useCopilotChat(normalizedConfig, onSendMessage)
+
+  // Listen for choice selection and auto-send based on config preferences
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      const behavior = normalizedConfig.uiConfig.composer?.onChoiceSelectBehavior || 'sendKey'
+      const key = e.detail?.key
+      const text = e.detail?.text
+      const explicitPayload = e.detail?.payload
+      if (!explicitPayload && !key && !text) return
+      const payload = explicitPayload || (behavior === 'sendText' ? `${key}. ${text}` : key)
+      setInput(payload)
+      setTimeout(() => {
+        const inputEl = document.activeElement as HTMLElement
+        // ensure send fires with current state; rely on sendMsg using state
+        sendMsg()
+      }, 0)
+    }
+    window.addEventListener('copilot-choice-selected', handler)
+    return () => window.removeEventListener('copilot-choice-selected', handler)
+  }, [normalizedConfig.uiConfig.composer?.onChoiceSelectBehavior, setInput, sendMsg])
   
   // Show deprecation warning for legacy config in development
   if (isLegacyCopilotConfig(config) && (process.env.NODE_ENV === 'development' || typeof window !== 'undefined')) {

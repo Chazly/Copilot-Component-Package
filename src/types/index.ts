@@ -1,9 +1,15 @@
+export interface ChoiceOption {
+  key: string
+  text: string
+}
+
 export interface Message {
-    id: string
-    content: string
-    sender: "user" | "assistant"
-    timestamp: Date
-  }
+  id: string
+  content: string
+  sender: "user" | "assistant"
+  timestamp: Date
+  choices?: ChoiceOption[]
+}
 
 // Environment detection types - Framework-agnostic environment handling
 export type FrameworkType = 'nextjs' | 'vite' | 'nuxt' | 'sveltekit' | 'remix' | 'astro' | 'unknown'
@@ -80,6 +86,14 @@ export interface ValidationResult {
       showAvatar?: boolean;
       floatingButton?: boolean;
       layout?: "chatbox" | "sidebar" | "fullpage";
+      composer?: {
+        supportedElements?: ("choices" | string)[];
+        onChoiceSelectBehavior?: "sendKey" | "sendText";
+        multiSelect?: boolean;
+        selectionLimit?: number;
+        submitLabel?: string;
+        sendOnSelect?: boolean; // if true, clicking a choice sends immediately; for multi-select typically false
+      };
     };
     security?: {
       dataRetention?: number; // Days to keep data

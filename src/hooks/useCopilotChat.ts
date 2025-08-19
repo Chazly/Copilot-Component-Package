@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Message, NormalizedCopilotConfig, isAICopilotConfig } from '../types'
+import { Message, NormalizedCopilotConfig } from '../types'
 import { useModelProvider } from './useModelProvider'
 import { ChatMessage } from '../services/BaseProvider'
+import { parseChoicesFromText } from '../lib/utils'
 
 // Convert Message to ChatMessage format
 function messageToProviderFormat(message: Message): ChatMessage {
@@ -72,13 +73,15 @@ export function useCopilotChat(
       }
 
       setTimeout(() => {
+        const parsed = parseChoicesFromText(responseContent)
         setMessages((m) => [
           ...m,
           {
             id: crypto.randomUUID(),
-            content: responseContent,
+            content: parsed.remainingText,
             sender: "assistant",
             timestamp: new Date(),
+            choices: parsed.choices || undefined
           },
         ])
         setIsLoading(false)
@@ -146,13 +149,21 @@ export function useCopilotChat(
             isFirstChunk = false
           }
           
-          setMessages((m) => 
-            m.map(msg => 
-              msg.id === responseId 
-                ? { ...msg, content: msg.content + chunk.content }
+          setMessages((m) => {
+            const updated = m.map(msg =>
+              msg.id === responseId
+                ? { ...msg, content: msg.content + (chunk.content || '') }
                 : msg
             )
-          )
+            // As content grows, try to parse choices without being too aggressive
+            const target = updated.find(msg => msg.id === responseId)
+            if (target) {
+              const parsed = parseChoicesFromText(target.content)
+              target.content = parsed.remainingText
+              target.choices = parsed.choices || undefined
+            }
+            return [...updated]
+          })
           
           // Keep this for backwards compatibility/fallback
           if (chunk.isComplete) {

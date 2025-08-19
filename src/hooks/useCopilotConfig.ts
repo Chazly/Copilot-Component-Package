@@ -32,7 +32,15 @@ const DEFAULT_AI_CONFIG: Partial<AICopilotConfig> = {
     theme: 'auto',
     showAvatar: true,
     floatingButton: false,
-    layout: 'chatbox'
+    layout: 'chatbox',
+    composer: {
+      supportedElements: ['choices'],
+      onChoiceSelectBehavior: 'sendKey',
+      multiSelect: false,
+      selectionLimit: undefined,
+      submitLabel: 'Submit',
+      sendOnSelect: true
+    }
   },
   security: {
     dataRetention: 30,
@@ -95,7 +103,15 @@ export function migrateConfig(legacyConfig: CopilotConfig): AICopilotConfig {
       theme: 'auto',
       showAvatar: true,
       floatingButton: false,
-      layout: 'chatbox'
+      layout: 'chatbox',
+      composer: {
+        supportedElements: ['choices'],
+        onChoiceSelectBehavior: 'sendKey',
+        multiSelect: false,
+        selectionLimit: undefined,
+        submitLabel: 'Submit',
+        sendOnSelect: true
+      }
     },
     ...DEFAULT_AI_CONFIG
   }
@@ -204,7 +220,15 @@ function normalizeConfig(config: CopilotConfigType): NormalizedCopilotConfig {
         theme: migrated.uiConfig?.theme || DEFAULT_AI_CONFIG.uiConfig!.theme!,
         showAvatar: migrated.uiConfig?.showAvatar !== undefined ? migrated.uiConfig.showAvatar : DEFAULT_AI_CONFIG.uiConfig!.showAvatar!,
         floatingButton: migrated.uiConfig?.floatingButton !== undefined ? migrated.uiConfig.floatingButton : DEFAULT_AI_CONFIG.uiConfig!.floatingButton!,
-        layout: migrated.uiConfig?.layout || DEFAULT_AI_CONFIG.uiConfig!.layout!
+        layout: migrated.uiConfig?.layout || DEFAULT_AI_CONFIG.uiConfig!.layout!,
+        composer: {
+          supportedElements: migrated.uiConfig?.composer?.supportedElements || DEFAULT_AI_CONFIG.uiConfig!.composer!.supportedElements!,
+          onChoiceSelectBehavior: migrated.uiConfig?.composer?.onChoiceSelectBehavior || DEFAULT_AI_CONFIG.uiConfig!.composer!.onChoiceSelectBehavior!,
+          multiSelect: migrated.uiConfig?.composer?.multiSelect !== undefined ? migrated.uiConfig.composer.multiSelect : DEFAULT_AI_CONFIG.uiConfig!.composer!.multiSelect!,
+          selectionLimit: migrated.uiConfig?.composer?.selectionLimit !== undefined ? migrated.uiConfig.composer.selectionLimit : DEFAULT_AI_CONFIG.uiConfig!.composer!.selectionLimit!,
+          submitLabel: migrated.uiConfig?.composer?.submitLabel || DEFAULT_AI_CONFIG.uiConfig!.composer!.submitLabel!,
+          sendOnSelect: migrated.uiConfig?.composer?.sendOnSelect !== undefined ? migrated.uiConfig.composer.sendOnSelect : DEFAULT_AI_CONFIG.uiConfig!.composer!.sendOnSelect!
+        }
       },
       security: {
         dataRetention: migrated.security?.dataRetention || DEFAULT_AI_CONFIG.security!.dataRetention!,
@@ -270,7 +294,15 @@ function normalizeConfig(config: CopilotConfigType): NormalizedCopilotConfig {
         theme: config.uiConfig?.theme || DEFAULT_AI_CONFIG.uiConfig!.theme!,
         showAvatar: config.uiConfig?.showAvatar !== undefined ? config.uiConfig.showAvatar : DEFAULT_AI_CONFIG.uiConfig!.showAvatar!,
         floatingButton: config.uiConfig?.floatingButton !== undefined ? config.uiConfig.floatingButton : DEFAULT_AI_CONFIG.uiConfig!.floatingButton!,
-        layout: config.uiConfig?.layout || DEFAULT_AI_CONFIG.uiConfig!.layout!
+        layout: config.uiConfig?.layout || DEFAULT_AI_CONFIG.uiConfig!.layout!,
+        composer: {
+          supportedElements: config.uiConfig?.composer?.supportedElements || DEFAULT_AI_CONFIG.uiConfig!.composer!.supportedElements!,
+          onChoiceSelectBehavior: config.uiConfig?.composer?.onChoiceSelectBehavior || DEFAULT_AI_CONFIG.uiConfig!.composer!.onChoiceSelectBehavior!,
+          multiSelect: config.uiConfig?.composer?.multiSelect !== undefined ? config.uiConfig.composer.multiSelect : DEFAULT_AI_CONFIG.uiConfig!.composer!.multiSelect!,
+          selectionLimit: config.uiConfig?.composer?.selectionLimit !== undefined ? config.uiConfig.composer.selectionLimit : DEFAULT_AI_CONFIG.uiConfig!.composer!.selectionLimit!,
+          submitLabel: config.uiConfig?.composer?.submitLabel || DEFAULT_AI_CONFIG.uiConfig!.composer!.submitLabel!,
+          sendOnSelect: config.uiConfig?.composer?.sendOnSelect !== undefined ? config.uiConfig.composer.sendOnSelect : DEFAULT_AI_CONFIG.uiConfig!.composer!.sendOnSelect!
+        }
       },
       security: {
         dataRetention: config.security?.dataRetention || DEFAULT_AI_CONFIG.security!.dataRetention!,

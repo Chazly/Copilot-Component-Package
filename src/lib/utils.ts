@@ -26,6 +26,34 @@ export function processMarkdown(text: string): string {
   return processed
 }
 
+// Parse custom [choices] markup into a structured array
+export function parseChoicesFromText(text: string): { remainingText: string; choices: { key: string; text: string }[] | null } {
+  if (!text) return { remainingText: text, choices: null }
+  const choicesBlockRegex = /\[choices\]([\s\S]*?)\[choices\/\]/i
+  const match = text.match(choicesBlockRegex)
+  if (!match) return { remainingText: text, choices: null }
+
+  const inner = match[1]
+  const choiceRegex = /\[choice\]([\s\S]*?)\[choice\/?\]/gi
+  const choices: { key: string; text: string }[] = []
+  let choiceMatch: RegExpExecArray | null
+  while ((choiceMatch = choiceRegex.exec(inner)) !== null) {
+    const raw = (choiceMatch[1] || '').trim()
+    // Expect format like: "A. description"; fallback if missing key
+    const keyMatch = raw.match(/^([A-Za-z])\s*\.?\s*(.*)$/)
+    if (keyMatch) {
+      const key = keyMatch[1].toUpperCase()
+      const textPart = keyMatch[2] && keyMatch[2].trim().length > 0 ? keyMatch[2].trim() : raw
+      choices.push({ key, text: textPart })
+    } else {
+      choices.push({ key: String.fromCharCode(65 + choices.length), text: raw })
+    }
+  }
+
+  const remainingText = text.replace(choicesBlockRegex, '').trim()
+  return { remainingText, choices: choices.length > 0 ? choices : null }
+}
+
 // React component for rendering markdown text
 export function MarkdownText({ 
   children, 
