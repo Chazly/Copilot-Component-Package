@@ -427,10 +427,10 @@ function ChatInput({ input, setInput, sendMsg, isLoading, placeholder, colors, l
 }
 
 // Main CopilotChat Component
-export function CopilotChat({ config, onSendMessage, className }: CopilotChatProps) {
+export function CopilotChat({ config, onSendMessage, className, tools, context, toolContext }: CopilotChatProps) {
   const { config: normalizedConfig } = useCopilotConfig(config)
   const configProps = getConfigProperties(config)
-  const { messages, input, setInput, sendMsg, isLoading } = useCopilotChat(normalizedConfig, onSendMessage)
+  const { messages, input, setInput, sendMsg, isLoading } = useCopilotChat(normalizedConfig, onSendMessage, { tools, context, toolContext })
 
   // Listen for choice selection and auto-send based on config preferences
   React.useEffect(() => {

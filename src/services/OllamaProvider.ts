@@ -129,7 +129,8 @@ export class OllamaProvider extends BaseProvider {
   
   async sendMessage(
     messages: ChatMessage[], 
-    systemPrompt?: string
+    systemPrompt?: string,
+    tools?: any[]
   ): Promise<ChatResponse> {
     const startTime = Date.now()
     
@@ -185,7 +186,8 @@ export class OllamaProvider extends BaseProvider {
   async sendMessageStream(
     messages: ChatMessage[], 
     onChunk: (chunk: StreamChunk) => void,
-    systemPrompt?: string
+    systemPrompt?: string,
+    tools?: any[]
   ): Promise<void> {
     const startTime = Date.now()
     

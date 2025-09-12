@@ -44,22 +44,45 @@ export const createOpenAIConfig = (options: {
     headers: {
       'Content-Type': 'application/json'
     },
-      requestTransformer: (messages: any[], systemPrompt?: string, stream = false) => {
+      requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[]) => {
         const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
+        const mapTools = (t?: any[]) => {
+          if (!t || !Array.isArray(t) || t.length === 0) return undefined
+          try {
+            return t.map((tool: any) => ({
+              type: 'function',
+              function: {
+                name: String((tool.id || tool.name || 'tool').toString().slice(0, 64)).replace(/[^a-zA-Z0-9_\-]/g, '_'),
+                description: tool.description || '',
+                parameters: tool.inputSchema || { type: 'object', properties: {} }
+              }
+            }))
+          } catch {
+            return undefined
+          }
+        }
         return {
           model: options.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
           messages: [...systemMessage, ...messages],
           stream,
           temperature: options.temperature || 0.7,
-          max_tokens: options.maxTokens || 2000
+          max_tokens: options.maxTokens || 2000,
+          tools: mapTools(tools)
         }
       },
       responseTransformer: (response: any) => {
         if (response.choices?.[0]?.message?.content) {
+          const msg = response.choices[0].message
+          const toolCalls = (msg.tool_calls || []).map((tc: any) => ({
+            id: tc.id,
+            name: tc.function?.name,
+            arguments: (() => { try { return JSON.parse(tc.function?.arguments || '{}') } catch { return {} } })()
+          }))
           return {
-            content: response.choices[0].message.content,
+            content: msg.content,
             finishReason: response.choices[0].finish_reason,
-            usage: response.usage
+            usage: response.usage,
+            metadata: toolCalls.length ? { toolCalls } : undefined
           }
         }
         throw new Error('Invalid OpenAI response format')
@@ -118,22 +141,45 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
           headers: {
             'Content-Type': 'application/json'
           },
-          requestTransformer: (messages: any[], systemPrompt?: string, stream = false) => {
+          requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[]) => {
             const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
+            const mapTools = (t?: any[]) => {
+              if (!t || !Array.isArray(t) || t.length === 0) return undefined
+              try {
+                return t.map((tool: any) => ({
+                  type: 'function',
+                  function: {
+                    name: String((tool.id || tool.name || 'tool').toString().slice(0, 64)).replace(/[^a-zA-Z0-9_\-]/g, '_'),
+                    description: tool.description || '',
+                    parameters: tool.inputSchema || { type: 'object', properties: {} }
+                  }
+                }))
+              } catch {
+                return undefined
+              }
+            }
             return {
               model: config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
               messages: [...systemMessage, ...messages],
               stream,
               temperature: 0.7,
-              max_tokens: 2000
+              max_tokens: 2000,
+              tools: mapTools(tools)
             }
           },
           responseTransformer: (response: any) => {
-            if (response.choices?.[0]?.message?.content) {
+            if (response.choices?.[0]?.message) {
+              const msg = response.choices[0].message
+              const toolCalls = (msg.tool_calls || []).map((tc: any) => ({
+                id: tc.id,
+                name: tc.function?.name,
+                arguments: (() => { try { return JSON.parse(tc.function?.arguments || '{}') } catch { return {} } })()
+              }))
               return {
-                content: response.choices[0].message.content,
+                content: msg.content || '',
                 finishReason: response.choices[0].finish_reason,
-                usage: response.usage
+                usage: response.usage,
+                metadata: toolCalls.length ? { toolCalls } : undefined
               }
             }
             throw new Error('Invalid OpenAI response format')

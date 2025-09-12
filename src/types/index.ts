@@ -11,6 +11,20 @@ export interface Message {
   choices?: ChoiceOption[]
 }
 
+// JSONSchema placeholder type for runtime tools
+export type JSONSchema = any
+
+// Runtime tool specification for model-native tools/function calling
+export interface RuntimeTool {
+  id: string
+  name: string
+  description?: string
+  inputSchema: JSONSchema
+  outputSchema?: JSONSchema
+  route: string
+  transport?: 'http' | 'sse'
+}
+
 // Environment detection types - Framework-agnostic environment handling
 export type FrameworkType = 'nextjs' | 'vite' | 'nuxt' | 'sveltekit' | 'remix' | 'astro' | 'unknown'
 
@@ -228,6 +242,9 @@ export interface ValidationResult {
     config: CopilotConfigType
     onSendMessage?: (message: string) => Promise<string> | string
     className?: string
+    tools?: RuntimeTool[]
+    context?: string | (() => Promise<string> | string)
+    toolContext?: { businessId?: string; userId?: string; sessionId?: string } | (() => Promise<{ businessId?: string; userId?: string; sessionId?: string } | undefined> | { businessId?: string; userId?: string; sessionId?: string })
   }
 
   export interface ResizableLayoutProps {
@@ -246,6 +263,10 @@ export interface ValidationResult {
     updateConfig: (newConfig: Partial<AICopilotConfig>) => void;
     resetConfig: () => void;
     isReady: boolean;
+    // Runtime extensions
+    runtimeTools?: RuntimeTool[];
+    getContext?: () => Promise<string> | string;
+    getToolContext?: () => Promise<{ businessId?: string; userId?: string; sessionId?: string } | undefined> | { businessId?: string; userId?: string; sessionId?: string };
   }
   
   // Phase 5 type definitions for new enterprise features

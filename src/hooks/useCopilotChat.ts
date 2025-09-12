@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Message, NormalizedCopilotConfig } from '../types'
+import { Message, NormalizedCopilotConfig, RuntimeTool } from '../types'
 import { useModelProvider } from './useModelProvider'
 import { ChatMessage } from '../services/BaseProvider'
 import { parseChoicesFromText } from '../lib/utils'
@@ -16,7 +16,12 @@ function messageToProviderFormat(message: Message): ChatMessage {
 // Enhanced hook with provider abstraction
 export function useCopilotChat(
   config: NormalizedCopilotConfig,
-  onSendMessage?: (message: string) => Promise<string> | string
+  onSendMessage?: (message: string) => Promise<string> | string,
+  options?: {
+    tools?: RuntimeTool[]
+    context?: string | (() => Promise<string> | string)
+    toolContext?: { businessId?: string; userId?: string; sessionId?: string } | (() => Promise<{ businessId?: string; userId?: string; sessionId?: string } | undefined> | { businessId?: string; userId?: string; sessionId?: string })
+  }
 ) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -33,6 +38,34 @@ export function useCopilotChat(
   // Use provider abstraction for AI configs
   const shouldUseProvider = !config.isLegacyConfig
   const modelProvider = useModelProvider(config)
+
+  const resolveContextString = async (): Promise<string | undefined> => {
+    const ctx = options?.context
+    if (!ctx) return undefined
+    if (typeof ctx === 'function') {
+      const val = await (ctx as any)()
+      return typeof val === 'string' ? val : String(val)
+    }
+    return ctx
+  }
+
+  const resolveToolContext = async (): Promise<{ businessId?: string; userId?: string; sessionId?: string } | undefined> => {
+    const ctx = options?.toolContext
+    if (!ctx) return undefined
+    if (typeof ctx === 'function') {
+      return await (ctx as any)()
+    }
+    return ctx
+  }
+
+  const buildSystemPromptWithContext = async (): Promise<string | undefined> => {
+    const ctx = await resolveContextString()
+    if (!ctx) return config.systemPrompt
+    const sessionPrefix = '[SESSION_CONTEXT] '
+    const merged = `${sessionPrefix}${ctx}`
+    if (!config.systemPrompt) return merged
+    return `${merged}\n${config.systemPrompt}`
+  }
 
   const sendMsg = async () => {
     if (!input.trim() || isLoading) return
@@ -59,10 +92,30 @@ export function useCopilotChat(
         
         const response = await modelProvider.sendMessage(
           chatMessages,
-          config.systemPrompt
+          await buildSystemPromptWithContext(),
+          options?.tools
         )
         
         responseContent = response.content
+
+        // Handle model tool-calls (OpenAI function calling or equivalent)
+        const toolCalls: Array<{ id?: string; name?: string; arguments?: any }> | undefined = (response as any)?.metadata?.toolCalls
+        if (toolCalls && toolCalls.length && options?.tools && options.tools.length) {
+          const sanitize = (s: string) => String(s).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_')
+          for (const call of toolCalls) {
+            const tool = options.tools.find(t => sanitize(t.id) === call.name || sanitize(t.name) === call.name)
+            if (!tool) continue
+            try {
+              const result = await callRuntimeTool(tool, call.arguments || {})
+              if ((tool.transport || 'sse') === 'http') {
+                const content = typeof result === 'string' ? result : '```json\n' + JSON.stringify(result, null, 2) + '\n```'
+                setMessages(m => [...m, { id: crypto.randomUUID(), content, sender: 'assistant', timestamp: new Date() }])
+              }
+            } catch (e) {
+              setMessages(m => [...m, { id: crypto.randomUUID(), content: `Tool '${tool.name}' failed.`, sender: 'assistant', timestamp: new Date() }])
+            }
+          }
+        }
         
       } else if (onSendMessage) {
         // Use legacy callback
@@ -170,7 +223,8 @@ export function useCopilotChat(
             setIsLoading(false)
           }
         },
-        config.systemPrompt
+        await buildSystemPromptWithContext(),
+        options?.tools
       )
       
     } catch (error) {
@@ -189,6 +243,69 @@ export function useCopilotChat(
     }
   }
 
+  // Tool invocation: POST HTTP or SSE streaming
+  const callRuntimeTool = async (tool: RuntimeTool, parameters: any) => {
+    const contextPayload = await resolveToolContext()
+    const body = {
+      toolId: tool.id,
+      parameters,
+      context: contextPayload || {}
+    }
+
+    if (tool.transport === 'http') {
+      const resp = await fetch(tool.route, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (!resp.ok) throw new Error(`Tool HTTP ${resp.status}`)
+      return await resp.json()
+    }
+
+    // SSE default
+    const resp = await fetch(tool.route, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (!resp.body) throw new Error('No SSE stream')
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let final: any = null
+    let assistantMsgId: string | null = null
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n').filter(l => l.trim())
+        for (const line of lines) {
+          const dataLine = line.startsWith('data: ') ? line.slice(6) : line
+          if (dataLine.trim() === '[DONE]') {
+            break
+          }
+          try {
+            const data = JSON.parse(dataLine)
+            const content = typeof data === 'string' ? data : (data.delta || data.content || '')
+            if (content) {
+              // create placeholder if needed
+              if (!assistantMsgId) {
+                assistantMsgId = crypto.randomUUID()
+                setMessages(m => [...m, { id: assistantMsgId!, content: '', sender: 'assistant', timestamp: new Date() }])
+              }
+              const idToUpdate = assistantMsgId
+              setMessages(m => m.map(msg => msg.id === idToUpdate ? { ...msg, content: msg.content + content } : msg))
+            }
+            if (data.final) final = data.final
+          } catch {}
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    return final
+  }
+
   return {
     messages,
     input,
@@ -196,6 +313,7 @@ export function useCopilotChat(
     sendMsg: config.performance?.streamingEnabled ? sendMsgStream : sendMsg,
     sendMsgStream,
     isLoading,
+    callRuntimeTool,
     // Provider information
     providerStatus: shouldUseProvider ? {
       isReady: modelProvider.isReady,

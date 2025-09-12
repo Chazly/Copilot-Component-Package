@@ -82,12 +82,14 @@ export abstract class BaseProvider {
   abstract authenticate(): Promise<boolean>
   abstract sendMessage(
     messages: ChatMessage[], 
-    systemPrompt?: string
+    systemPrompt?: string,
+    tools?: any[]
   ): Promise<ChatResponse>
   abstract sendMessageStream(
     messages: ChatMessage[], 
     onChunk: (chunk: StreamChunk) => void,
-    systemPrompt?: string
+    systemPrompt?: string,
+    tools?: any[]
   ): Promise<void>
   abstract validateConfig(): boolean
   abstract checkHealth(): Promise<boolean>

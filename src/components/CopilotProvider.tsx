@@ -1,5 +1,5 @@
-import React, { createContext, useContext, ReactNode } from 'react'
-import { CopilotConfigType, CopilotContextValue } from '../types'
+import React, { createContext, useContext, ReactNode, useMemo } from 'react'
+import { CopilotConfigType, CopilotContextValue, RuntimeTool } from '../types'
 import { useCopilotConfig } from '../hooks/useCopilotConfig'
 
 // Create the context
@@ -9,19 +9,37 @@ const CopilotContext = createContext<CopilotContextValue | null>(null)
 interface CopilotProviderProps {
   config: CopilotConfigType
   children: ReactNode
+  tools?: RuntimeTool[]
+  context?: string | (() => Promise<string> | string)
+  toolContext?: { businessId?: string; userId?: string; sessionId?: string } | (() => Promise<{ businessId?: string; userId?: string; sessionId?: string } | undefined> | { businessId?: string; userId?: string; sessionId?: string })
 }
 
 // Provider component
-export function CopilotProvider({ config, children }: CopilotProviderProps) {
+export function CopilotProvider({ config, children, tools, context, toolContext }: CopilotProviderProps) {
   const configState = useCopilotConfig(config)
 
-  const contextValue: CopilotContextValue = {
+  const getContext = useMemo(() => {
+    if (typeof context === 'function') return context as () => Promise<string> | string
+    if (typeof context === 'string') return () => context
+    return undefined
+  }, [context])
+
+  const getToolContext = useMemo(() => {
+    if (typeof toolContext === 'function') return toolContext as () => Promise<{ businessId?: string; userId?: string; sessionId?: string } | undefined>
+    if (toolContext && typeof toolContext === 'object') return () => toolContext
+    return undefined
+  }, [toolContext])
+
+  const contextValue: CopilotContextValue = useMemo(() => ({
     config: configState.config,
     validation: configState.validation,
     updateConfig: configState.updateConfig,
     resetConfig: configState.resetConfig,
-    isReady: configState.isReady
-  }
+    isReady: configState.isReady,
+    runtimeTools: tools,
+    getContext,
+    getToolContext
+  }), [configState.config, configState.validation, configState.updateConfig, configState.resetConfig, configState.isReady, tools, getContext, getToolContext])
 
   // Show warning if config is invalid in development
   if (!configState.isReady && (process.env.NODE_ENV === 'development' || configState.config.development.debugMode)) {

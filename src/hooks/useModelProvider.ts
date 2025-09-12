@@ -311,14 +311,15 @@ export function useModelProvider(config: NormalizedCopilotConfig) {
   // Provider wrapper methods
   const sendMessage = useCallback(async (
     messages: ChatMessage[],
-    systemPrompt?: string
+    systemPrompt?: string,
+    tools?: any[]
   ): Promise<ChatResponse> => {
     if (!state.currentProvider) {
       throw new Error('No provider available')
     }
 
     try {
-      return await state.currentProvider.sendMessage(messages, systemPrompt)
+      return await state.currentProvider.sendMessage(messages, systemPrompt, tools)
     } catch (error) {
       // Refresh health status and potentially switch providers
       await refreshProviderHealth()
@@ -329,14 +330,15 @@ export function useModelProvider(config: NormalizedCopilotConfig) {
   const sendMessageStream = useCallback(async (
     messages: ChatMessage[],
     onChunk: (chunk: StreamChunk) => void,
-    systemPrompt?: string
+    systemPrompt?: string,
+    tools?: any[]
   ): Promise<void> => {
     if (!state.currentProvider) {
       throw new Error('No provider available')
     }
 
     try {
-      return await state.currentProvider.sendMessageStream(messages, onChunk, systemPrompt)
+      return await state.currentProvider.sendMessageStream(messages, onChunk, systemPrompt, tools)
     } catch (error) {
       // Refresh health status and potentially switch providers
       await refreshProviderHealth()
