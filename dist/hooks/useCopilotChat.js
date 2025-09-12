@@ -55,7 +55,7 @@ export function useCopilotChat(config, onSendMessage, options) {
         return `${merged}\n${config.systemPrompt}`;
     };
     const sendMsg = async () => {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         if (!input.trim() || isLoading)
             return;
         const outgoing = {
@@ -76,16 +76,31 @@ export function useCopilotChat(config, onSendMessage, options) {
                 chatMessages.push(messageToProviderFormat(outgoing));
                 const toolChoice = ((_a = config.toolCalls) === null || _a === void 0 ? void 0 : _a.toolChoice) === 'auto' || !((_b = config.toolCalls) === null || _b === void 0 ? void 0 : _b.toolChoice)
                     ? 'auto'
-                    : { type: 'function', function: { name: ((_c = config.toolCalls) === null || _c === void 0 ? void 0 : _c.toolChoice).name } };
+                    : { type: 'function', function: { name: String(((_c = config.toolCalls) === null || _c === void 0 ? void 0 : _c.toolChoice).name || '').slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_') } };
                 const debugEnabled = !!((_d = config.toolCalls) === null || _d === void 0 ? void 0 : _d.debug);
+                if (debugEnabled) {
+                    try {
+                        const names = ((options === null || options === void 0 ? void 0 : options.tools) || []).map(t => String((t.id || t.name)).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_'));
+                        console.log(`[CHAT_TOOLS] ${names.length} ${names.join(' ')}`);
+                        console.log(`[TOOL_CALLS] { streaming:{enabled:${!!((_f = (_e = config.toolCalls) === null || _e === void 0 ? void 0 : _e.streaming) === null || _f === void 0 ? void 0 : _f.enabled)}}, route:'${((_g = config.toolCalls) === null || _g === void 0 ? void 0 : _g.route) || ''}', transport:'${((_h = config.toolCalls) === null || _h === void 0 ? void 0 : _h.transport) || 'sse'}', toolChoice:'${typeof toolChoice === 'string' ? toolChoice : ((_j = toolChoice === null || toolChoice === void 0 ? void 0 : toolChoice.function) === null || _j === void 0 ? void 0 : _j.name) || 'auto'}', debug:${debugEnabled} }`);
+                        console.log(`[STREAMING_ENABLED] ${!!((_k = config.performance) === null || _k === void 0 ? void 0 : _k.streamingEnabled)}`);
+                    }
+                    catch (_m) { }
+                }
                 const response = await modelProvider.sendMessage(chatMessages, await buildSystemPromptWithContext(), options === null || options === void 0 ? void 0 : options.tools, toolChoice, debugEnabled);
                 responseContent = response.content;
                 // Handle model tool-calls (OpenAI function calling or equivalent)
-                const toolCalls = (_e = response === null || response === void 0 ? void 0 : response.metadata) === null || _e === void 0 ? void 0 : _e.toolCalls;
+                const toolCalls = (_l = response === null || response === void 0 ? void 0 : response.metadata) === null || _l === void 0 ? void 0 : _l.toolCalls;
                 if (toolCalls && toolCalls.length && (options === null || options === void 0 ? void 0 : options.tools) && options.tools.length) {
                     const sanitize = (s) => String(s).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_');
                     for (const call of toolCalls) {
                         const tool = options.tools.find(t => sanitize(t.id) === call.name || sanitize(t.name) === call.name);
+                        if (debugEnabled) {
+                            try {
+                                console.log(`[Tools][dispatch] { function:'${sanitize(call.name || '')}', matched:'${tool ? sanitize(tool.id) : 'none'}' }`);
+                            }
+                            catch (_o) { }
+                        }
                         if (!tool)
                             continue;
                         try {
@@ -174,7 +189,7 @@ export function useCopilotChat(config, onSendMessage, options) {
             const toolChoice = ((_b = config.toolCalls) === null || _b === void 0 ? void 0 : _b.toolChoice) === 'auto' || !((_c = config.toolCalls) === null || _c === void 0 ? void 0 : _c.toolChoice)
                 ? 'auto'
                 : { type: 'function', function: { name: ((_d = config.toolCalls) === null || _d === void 0 ? void 0 : _d.toolChoice).name } };
-            await modelProvider.sendMessageStream(chatMessages, (chunk) => {
+            await modelProvider.sendMessageStream(chatMessages, async (chunk) => {
                 var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
                 // Buffer tool_call deltas if configured
                 const allowStreamingToolCalls = !!((_b = (_a = config.toolCalls) === null || _a === void 0 ? void 0 : _a.streaming) === null || _b === void 0 ? void 0 : _b.enabled);

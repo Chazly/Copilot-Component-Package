@@ -1,6 +1,12 @@
 import { CustomProvider } from '../services/CustomProvider'
 import { ProviderRegistry } from '../services/BaseProvider'
 
+// Commit/version identifier for runtime diagnostics
+const COPILOT_COMMIT = '3fea60c'
+
+// Shared sanitizer to ensure OpenAI-safe tool names
+const sanitizeToolName = (value: string) => String(value).toString().slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_')
+
 // OpenAI model configurations
 export const OPENAI_MODELS = {
   'gpt-4o-latest': { name: 'gpt-4o-latest', contextWindow: 128000, description: 'Latest GPT-4 Omni model' },
@@ -44,7 +50,7 @@ export const createOpenAIConfig = (options: {
     headers: {
       'Content-Type': 'application/json'
     },
-      requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, debug?: boolean) => {
+      requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, _debug?: boolean) => {
         const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
         const mapTools = (t?: any[]) => {
           if (!t || !Array.isArray(t) || t.length === 0) return undefined
@@ -52,7 +58,7 @@ export const createOpenAIConfig = (options: {
             return t.map((tool: any) => ({
               type: 'function',
               function: {
-                name: String((tool.id || tool.name || 'tool').toString().slice(0, 64)).replace(/[^a-zA-Z0-9_\-]/g, '_'),
+                name: sanitizeToolName(tool.id || tool.name || 'tool'),
                 description: tool.description || '',
                 parameters: tool.inputSchema || { type: 'object', properties: {} }
               }
@@ -61,8 +67,11 @@ export const createOpenAIConfig = (options: {
             return undefined
           }
         }
+
+        const modelId = options.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest'
+        const path = '/v1/chat/completions'
         const payload: any = {
-          model: options.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
+          model: modelId,
           messages: [...systemMessage, ...messages],
           stream,
           temperature: options.temperature || 0.7,
@@ -70,9 +79,10 @@ export const createOpenAIConfig = (options: {
           tools: mapTools(tools)
         }
         if (toolChoice) payload.tool_choice = toolChoice
-        if (debug) {
-          try { console.debug('[OpenAI][requestTransformer] tools:', payload.tools?.map((t: any) => t.function?.name), 'tool_choice:', payload.tool_choice, 'stream:', stream) } catch {}
-        }
+        try {
+          console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t: any) => t.function?.name).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:chat }`)
+          console.log(`[CopilotPackage] version: ${COPILOT_COMMIT}`)
+        } catch {}
         return payload
       },
       responseTransformer: (response: any) => {
@@ -149,7 +159,8 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
           headers: {
             'Content-Type': 'application/json'
           },
-          requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, debug?: boolean) => {
+          requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, _debug?: boolean) => {
+            const pathTemplate = '/v1/chat/completions'
             const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
             const mapTools = (t?: any[]) => {
               if (!t || !Array.isArray(t) || t.length === 0) return undefined
@@ -157,7 +168,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                 return t.map((tool: any) => ({
                   type: 'function',
                   function: {
-                    name: String((tool.id || tool.name || 'tool').toString().slice(0, 64)).replace(/[^a-zA-Z0-9_\-]/g, '_'),
+                    name: sanitizeToolName(tool.id || tool.name || 'tool'),
                     description: tool.description || '',
                     parameters: tool.inputSchema || { type: 'object', properties: {} }
                   }
@@ -166,21 +177,41 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                 return undefined
               }
             }
-            const payload: any = {
-              model: config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
-              messages: [...systemMessage, ...messages],
-              stream,
-              temperature: 0.7,
-              max_tokens: 2000,
-              tools: mapTools(tools)
+
+            const modelId = config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest'
+            // Support both Chat Completions and Responses APIs
+            const isResponses = String(pathTemplate).endsWith('/v1/responses') || String(config.baseURL || '').endsWith('/v1/responses')
+            let payload: any
+            if (isResponses) {
+              // Minimal Responses API payload
+              // Flatten messages to a single input string while preserving system prompt
+              const text = [systemPrompt ? `(system) ${systemPrompt}` : '', ...messages.map((m: any) => `(${m.role}) ${m.content}`)].filter(Boolean).join('\n')
+              payload = {
+                model: modelId,
+                input: text,
+                tools: mapTools(tools),
+                tool_choice: toolChoice || undefined,
+                stream
+              }
+            } else {
+              payload = {
+                model: modelId,
+                messages: [...systemMessage, ...messages],
+                stream,
+                temperature: 0.7,
+                max_tokens: 2000,
+                tools: mapTools(tools)
+              }
+              if (toolChoice) payload.tool_choice = toolChoice
             }
-            if (toolChoice) payload.tool_choice = toolChoice
-            if (debug) {
-              try { console.debug('[OpenAI][requestTransformer] tools:', payload.tools?.map((t: any) => t.function?.name), 'tool_choice:', payload.tool_choice, 'stream:', stream) } catch {}
-            }
+            try {
+              console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t: any) => t.function?.name).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:${isResponses ? 'responses' : 'chat'} }`)
+              console.log(`[CopilotPackage] version: ${COPILOT_COMMIT}`)
+            } catch {}
             return payload
           },
           responseTransformer: (response: any) => {
+            // Chat Completions
             if (response.choices?.[0]?.message) {
               const msg = response.choices[0].message
               const toolCalls = (msg.tool_calls || []).map((tc: any) => ({
@@ -191,6 +222,28 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
               return {
                 content: msg.content || '',
                 finishReason: response.choices[0].finish_reason,
+                usage: response.usage,
+                metadata: toolCalls.length ? { toolCalls } : undefined
+              }
+            }
+            // Responses API (best-effort parsing)
+            if (response?.output_text || response?.response?.content) {
+              let content = ''
+              if (typeof response.output_text === 'string') content = response.output_text
+              else if (Array.isArray(response.response?.content)) {
+                const textPart = response.response.content.find((c: any) => c?.text || c?.type === 'output_text')
+                content = textPart?.text || textPart?.content || ''
+              }
+              // Extract tool calls if present under output or response
+              const toolCallsRaw = (response?.tool_calls || response?.response?.tool_calls || []) as any[]
+              const toolCalls = (toolCallsRaw || []).map((tc: any) => ({
+                id: tc.id,
+                name: tc.function?.name,
+                arguments: (() => { try { return JSON.parse(tc.function?.arguments || '{}') } catch { return {} } })()
+              }))
+              return {
+                content,
+                finishReason: 'stop',
                 usage: response.usage,
                 metadata: toolCalls.length ? { toolCalls } : undefined
               }

@@ -211,8 +211,25 @@ export function useModelProvider(config) {
             throw new Error('No provider available');
         }
         try {
+            // Merge precedence: chat-level tools > provider-level tools
+            const providerTools = (config === null || config === void 0 ? void 0 : config.tools) || [];
+            const chatTools = tools || [];
+            const mergedTools = (() => {
+                if (chatTools.length && providerTools.length)
+                    return [...chatTools, ...providerTools];
+                if (chatTools.length)
+                    return chatTools;
+                if (providerTools.length)
+                    return providerTools;
+                return [];
+            })();
+            const origin = chatTools.length && providerTools.length ? 'merged' : (chatTools.length ? 'chat' : (providerTools.length ? 'provider' : 'none'));
+            try {
+                console.log(`[Tools][resolved] { origin: '${origin}', count:${mergedTools.length} }`);
+            }
+            catch (_a) { }
             // pass through optional args when provider supports them (CustomProvider accepts and ignores extras)
-            return await state.currentProvider.sendMessage(messages, systemPrompt, tools, toolChoice, debug);
+            return await state.currentProvider.sendMessage(messages, systemPrompt, mergedTools, toolChoice, debug);
         }
         catch (error) {
             // Refresh health status and potentially switch providers
@@ -225,7 +242,23 @@ export function useModelProvider(config) {
             throw new Error('No provider available');
         }
         try {
-            return await state.currentProvider.sendMessageStream(messages, onChunk, systemPrompt, tools, toolChoice, debug);
+            const providerTools = (config === null || config === void 0 ? void 0 : config.tools) || [];
+            const chatTools = tools || [];
+            const mergedTools = (() => {
+                if (chatTools.length && providerTools.length)
+                    return [...chatTools, ...providerTools];
+                if (chatTools.length)
+                    return chatTools;
+                if (providerTools.length)
+                    return providerTools;
+                return [];
+            })();
+            const origin = chatTools.length && providerTools.length ? 'merged' : (chatTools.length ? 'chat' : (providerTools.length ? 'provider' : 'none'));
+            try {
+                console.log(`[Tools][resolved] { origin: '${origin}', count:${mergedTools.length} }`);
+            }
+            catch (_a) { }
+            return await state.currentProvider.sendMessageStream(messages, onChunk, systemPrompt, mergedTools, toolChoice, debug);
         }
         catch (error) {
             // Refresh health status and potentially switch providers

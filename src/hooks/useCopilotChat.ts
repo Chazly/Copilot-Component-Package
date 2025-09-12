@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Message, NormalizedCopilotConfig, RuntimeTool } from '../types'
 import { useModelProvider } from './useModelProvider'
-import { ChatMessage } from '../services/BaseProvider'
+import { ChatMessage, StreamChunk } from '../services/BaseProvider'
 import { parseChoicesFromText } from '../lib/utils'
 
 // Convert Message to ChatMessage format
@@ -92,8 +92,16 @@ export function useCopilotChat(
         
         const toolChoice = config.toolCalls?.toolChoice === 'auto' || !config.toolCalls?.toolChoice
           ? 'auto'
-          : { type: 'function', function: { name: (config.toolCalls?.toolChoice as any).name } }
+          : { type: 'function', function: { name: String((config.toolCalls?.toolChoice as any).name || '').slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_') } }
         const debugEnabled = !!config.toolCalls?.debug
+        if (debugEnabled) {
+          try {
+            const names = (options?.tools || []).map(t => String((t.id || t.name)).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_'))
+            console.log(`[CHAT_TOOLS] ${names.length} ${names.join(' ')}`)
+            console.log(`[TOOL_CALLS] { streaming:{enabled:${!!config.toolCalls?.streaming?.enabled}}, route:'${config.toolCalls?.route || ''}', transport:'${config.toolCalls?.transport || 'sse'}', toolChoice:'${typeof toolChoice === 'string' ? toolChoice : (toolChoice as any)?.function?.name || 'auto'}', debug:${debugEnabled} }`)
+            console.log(`[STREAMING_ENABLED] ${!!config.performance?.streamingEnabled}`)
+          } catch {}
+        }
         const response = await (modelProvider as any).sendMessage(
           chatMessages,
           await buildSystemPromptWithContext(),
@@ -110,6 +118,9 @@ export function useCopilotChat(
           const sanitize = (s: string) => String(s).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_')
           for (const call of toolCalls) {
             const tool = options.tools.find(t => sanitize(t.id) === call.name || sanitize(t.name) === call.name)
+            if (debugEnabled) {
+              try { console.log(`[Tools][dispatch] { function:'${sanitize(call.name || '')}', matched:'${tool ? sanitize(tool.id) : 'none'}' }`) } catch {}
+            }
             if (!tool) continue
             try {
               const result = await callRuntimeTool(tool, call.arguments || {})
@@ -208,7 +219,7 @@ export function useCopilotChat(
         : { type: 'function', function: { name: (config.toolCalls?.toolChoice as any).name } }
       await (modelProvider as any).sendMessageStream(
         chatMessages,
-        (chunk) => {
+        async (chunk: StreamChunk) => {
           // Buffer tool_call deltas if configured
           const allowStreamingToolCalls = !!config.toolCalls?.streaming?.enabled
           if (allowStreamingToolCalls && chunk.raw && chunk.raw.choices?.[0]?.delta?.tool_calls) {

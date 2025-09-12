@@ -321,8 +321,20 @@ export function useModelProvider(config: NormalizedCopilotConfig) {
     }
 
     try {
+      // Merge precedence: chat-level tools > provider-level tools
+      const providerTools = (config as any)?.tools || []
+      const chatTools = tools || []
+      const mergedTools = (() => {
+        if (chatTools.length && providerTools.length) return [...chatTools, ...providerTools]
+        if (chatTools.length) return chatTools
+        if (providerTools.length) return providerTools
+        return []
+      })()
+      const origin = chatTools.length && providerTools.length ? 'merged' : (chatTools.length ? 'chat' : (providerTools.length ? 'provider' : 'none'))
+      try { console.log(`[Tools][resolved] { origin: '${origin}', count:${mergedTools.length} }`) } catch {}
+
       // pass through optional args when provider supports them (CustomProvider accepts and ignores extras)
-      return await (state.currentProvider as any).sendMessage(messages, systemPrompt, tools, toolChoice, debug)
+      return await (state.currentProvider as any).sendMessage(messages, systemPrompt, mergedTools, toolChoice, debug)
     } catch (error) {
       // Refresh health status and potentially switch providers
       await refreshProviderHealth()
@@ -343,7 +355,17 @@ export function useModelProvider(config: NormalizedCopilotConfig) {
     }
 
     try {
-      return await (state.currentProvider as any).sendMessageStream(messages, onChunk, systemPrompt, tools, toolChoice, debug)
+      const providerTools = (config as any)?.tools || []
+      const chatTools = tools || []
+      const mergedTools = (() => {
+        if (chatTools.length && providerTools.length) return [...chatTools, ...providerTools]
+        if (chatTools.length) return chatTools
+        if (providerTools.length) return providerTools
+        return []
+      })()
+      const origin = chatTools.length && providerTools.length ? 'merged' : (chatTools.length ? 'chat' : (providerTools.length ? 'provider' : 'none'))
+      try { console.log(`[Tools][resolved] { origin: '${origin}', count:${mergedTools.length} }`) } catch {}
+      return await (state.currentProvider as any).sendMessageStream(messages, onChunk, systemPrompt, mergedTools, toolChoice, debug)
     } catch (error) {
       // Refresh health status and potentially switch providers
       await refreshProviderHealth()

@@ -52,7 +52,7 @@ export declare const createOpenAIConfig: (options?: {
         headers: {
             'Content-Type': string;
         };
-        requestTransformer: (messages: any[], systemPrompt?: string, stream?: boolean, tools?: any[], toolChoice?: any, debug?: boolean) => any;
+        requestTransformer: (messages: any[], systemPrompt?: string, stream?: boolean, tools?: any[], toolChoice?: any, _debug?: boolean) => any;
         responseTransformer: (response: any) => {
             content: any;
             finishReason: any;
