@@ -1,8 +1,8 @@
 import { CustomProvider } from '../services/CustomProvider'
 import { ProviderRegistry } from '../services/BaseProvider'
+import { COPILOT_COMMIT } from '../lib/version'
 
-// Commit/version identifier for runtime diagnostics
-const COPILOT_COMMIT = '3fea60c'
+// Commit/version identifier for runtime diagnostics is imported from version helper
 
 // Shared sanitizer to ensure OpenAI-safe tool names
 const sanitizeToolName = (value: string) => String(value).toString().slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_')

@@ -26,6 +26,7 @@
     "author": "Chazly",
     "license": "MIT",
     "scripts": {
+        "prebuild": "node scripts/write-commit.js",
         "build": "tsc",
         "dev": "tsc --watch",
         "test:dev": "vite --config test/vite.config.ts",
