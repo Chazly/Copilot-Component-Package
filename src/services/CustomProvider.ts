@@ -10,7 +10,7 @@ import {
 
 export interface CustomProviderConfig extends ProviderConfig {
   customConfig?: {
-    requestTransformer?: (messages: ChatMessage[], systemPrompt?: string, stream?: boolean, tools?: any[]) => any
+    requestTransformer?: (messages: ChatMessage[], systemPrompt?: string, stream?: boolean, tools?: any[], toolChoice?: any, debug?: boolean) => any
     responseTransformer?: (response: any) => ChatResponse
     streamTransformer?: (chunk: any) => StreamChunk | null
     headers?: Record<string, string>
@@ -109,7 +109,9 @@ export class CustomProvider extends BaseProvider {
   async sendMessage(
     messages: ChatMessage[], 
     systemPrompt?: string,
-    tools?: any[]
+    tools?: any[],
+    toolChoice?: any,
+    debug?: boolean
   ): Promise<ChatResponse> {
     const startTime = Date.now()
     
@@ -118,8 +120,8 @@ export class CustomProvider extends BaseProvider {
       
       // Transform the request using custom transformer or default
       const requestBody = this.customConfig.requestTransformer 
-        ? this.customConfig.requestTransformer(messages, systemPrompt, false, tools)
-        : this.defaultRequestTransform(messages, systemPrompt, false, tools)
+        ? this.customConfig.requestTransformer(messages, systemPrompt, false, tools, toolChoice, debug)
+        : this.defaultRequestTransform(messages, systemPrompt, false, tools, toolChoice)
       
       const response = await this.makeRequest(endpoint, {
         method: this.customConfig.method || 'POST',
@@ -151,7 +153,9 @@ export class CustomProvider extends BaseProvider {
     messages: ChatMessage[], 
     onChunk: (chunk: StreamChunk) => void,
     systemPrompt?: string,
-    tools?: any[]
+    tools?: any[],
+    toolChoice?: any,
+    debug?: boolean
   ): Promise<void> {
     const startTime = Date.now()
     
@@ -159,8 +163,8 @@ export class CustomProvider extends BaseProvider {
       const endpoint = this.buildEndpoint(this.customConfig.pathTemplate!)
       
       const requestBody = this.customConfig.requestTransformer 
-        ? this.customConfig.requestTransformer(messages, systemPrompt, true, tools)
-        : this.defaultRequestTransform(messages, systemPrompt, true, tools)
+        ? this.customConfig.requestTransformer(messages, systemPrompt, true, tools, toolChoice, debug)
+        : this.defaultRequestTransform(messages, systemPrompt, true, tools, toolChoice)
       
       const response = await this.makeRequest(endpoint, {
         method: this.customConfig.method || 'POST',
@@ -255,7 +259,8 @@ export class CustomProvider extends BaseProvider {
     messages: ChatMessage[], 
     systemPrompt?: string,
     stream: boolean = false,
-    tools?: any[]
+    tools?: any[],
+    toolChoice?: any
   ): any {
     const requestMessages = []
     
@@ -271,7 +276,7 @@ export class CustomProvider extends BaseProvider {
       content: msg.content
     })))
     
-    return {
+    const payload: any = {
       model: this.config.model || 'default',
       messages: requestMessages,
       stream: stream,
@@ -279,6 +284,8 @@ export class CustomProvider extends BaseProvider {
       max_tokens: 2048,
       tools: tools && tools.length ? tools : undefined
     }
+    if (toolChoice) payload.tool_choice = toolChoice
+    return payload
   }
   
   private defaultResponseTransform(data: any): ChatResponse {

@@ -66,6 +66,7 @@ export interface StreamChunk {
   content: string
   isComplete: boolean
   usage?: ChatResponse['usage']
+  raw?: any
 }
 
 export abstract class BaseProvider {

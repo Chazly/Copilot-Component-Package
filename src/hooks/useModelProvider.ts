@@ -312,14 +312,17 @@ export function useModelProvider(config: NormalizedCopilotConfig) {
   const sendMessage = useCallback(async (
     messages: ChatMessage[],
     systemPrompt?: string,
-    tools?: any[]
+    tools?: any[],
+    toolChoice?: any,
+    debug?: boolean
   ): Promise<ChatResponse> => {
     if (!state.currentProvider) {
       throw new Error('No provider available')
     }
 
     try {
-      return await state.currentProvider.sendMessage(messages, systemPrompt, tools)
+      // pass through optional args when provider supports them (CustomProvider accepts and ignores extras)
+      return await (state.currentProvider as any).sendMessage(messages, systemPrompt, tools, toolChoice, debug)
     } catch (error) {
       // Refresh health status and potentially switch providers
       await refreshProviderHealth()
@@ -331,14 +334,16 @@ export function useModelProvider(config: NormalizedCopilotConfig) {
     messages: ChatMessage[],
     onChunk: (chunk: StreamChunk) => void,
     systemPrompt?: string,
-    tools?: any[]
+    tools?: any[],
+    toolChoice?: any,
+    debug?: boolean
   ): Promise<void> => {
     if (!state.currentProvider) {
       throw new Error('No provider available')
     }
 
     try {
-      return await state.currentProvider.sendMessageStream(messages, onChunk, systemPrompt, tools)
+      return await (state.currentProvider as any).sendMessageStream(messages, onChunk, systemPrompt, tools, toolChoice, debug)
     } catch (error) {
       // Refresh health status and potentially switch providers
       await refreshProviderHealth()

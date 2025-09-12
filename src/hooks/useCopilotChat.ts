@@ -90,10 +90,16 @@ export function useCopilotChat(
         const chatMessages = messages.map(messageToProviderFormat)
         chatMessages.push(messageToProviderFormat(outgoing))
         
-        const response = await modelProvider.sendMessage(
+        const toolChoice = config.toolCalls?.toolChoice === 'auto' || !config.toolCalls?.toolChoice
+          ? 'auto'
+          : { type: 'function', function: { name: (config.toolCalls?.toolChoice as any).name } }
+        const debugEnabled = !!config.toolCalls?.debug
+        const response = await (modelProvider as any).sendMessage(
           chatMessages,
           await buildSystemPromptWithContext(),
-          options?.tools
+          options?.tools,
+          toolChoice,
+          debugEnabled
         )
         
         responseContent = response.content
@@ -193,9 +199,31 @@ export function useCopilotChat(
       const chatMessages = messages.map(messageToProviderFormat)
       chatMessages.push(messageToProviderFormat(outgoing))
       
-      await modelProvider.sendMessageStream(
+      // streaming with tool_call delta buffering
+      const pendingToolCalls: Record<string, { name?: string; argumentsText: string }> = {}
+      const debugEnabled = !!config.toolCalls?.debug
+
+      const toolChoice = config.toolCalls?.toolChoice === 'auto' || !config.toolCalls?.toolChoice
+        ? 'auto'
+        : { type: 'function', function: { name: (config.toolCalls?.toolChoice as any).name } }
+      await (modelProvider as any).sendMessageStream(
         chatMessages,
         (chunk) => {
+          // Buffer tool_call deltas if configured
+          const allowStreamingToolCalls = !!config.toolCalls?.streaming?.enabled
+          if (allowStreamingToolCalls && chunk.raw && chunk.raw.choices?.[0]?.delta?.tool_calls) {
+            try {
+              const deltas = chunk.raw.choices[0].delta.tool_calls as Array<any>
+              for (const d of deltas) {
+                const id = String(d.id || d.index || '0')
+                if (!pendingToolCalls[id]) pendingToolCalls[id] = { argumentsText: '' }
+                if (d.function?.name) pendingToolCalls[id].name = d.function.name
+                if (typeof d.function?.arguments === 'string') pendingToolCalls[id].argumentsText += d.function.arguments
+              }
+            } catch {}
+            return
+          }
+
           // Hide loading dots as soon as first chunk arrives
           if (isFirstChunk && chunk.content) {
             setIsLoading(false)
@@ -221,10 +249,44 @@ export function useCopilotChat(
           // Keep this for backwards compatibility/fallback
           if (chunk.isComplete) {
             setIsLoading(false)
+            // If we buffered tool_calls, finalize and invoke them
+            const allowStreamingToolCalls = !!config.toolCalls?.streaming?.enabled
+            const route = config.toolCalls?.route
+            const transport = config.toolCalls?.transport || 'sse'
+            if (allowStreamingToolCalls && route) {
+              const buffered = Object.values(pendingToolCalls).filter(tc => tc.name)
+              if (debugEnabled) {
+                try { console.debug('[Copilot][tool_calls][buffered]', buffered) } catch {}
+              }
+              for (const tc of buffered) {
+                try {
+                  const args = (() => { try { return JSON.parse(tc.argumentsText || '{}') } catch { return {} } })()
+                  const tool = (options?.tools || []).find(t => {
+                    const sanitize = (s: string) => String(s).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_')
+                    return sanitize(t.id) === tc.name || sanitize(t.name) === tc.name
+                  })
+                  if (!tool) continue
+                  const effectiveTool = { ...tool, route, transport }
+                  if (debugEnabled) {
+                    try { console.debug('[Copilot][tool_calls][invoke]', { name: tc.name, args, route, transport }) } catch {}
+                  }
+                  const result = await callRuntimeTool(effectiveTool, args)
+                  if (debugEnabled) {
+                    try { console.debug('[Copilot][tool_calls][result]', result) } catch {}
+                  }
+                } catch (e) {
+                  if (debugEnabled) {
+                    try { console.debug('[Copilot][tool_calls][error]', e) } catch {}
+                  }
+                }
+              }
+            }
           }
         },
         await buildSystemPromptWithContext(),
-        options?.tools
+        options?.tools,
+        toolChoice,
+        debugEnabled
       )
       
     } catch (error) {

@@ -126,6 +126,15 @@ export interface ValidationResult {
       };
       streamingEnabled?: boolean;
     };
+    toolCalls?: {
+      streaming?: {
+        enabled: boolean
+      }
+      route?: string
+      transport?: 'http' | 'sse'
+      toolChoice?: 'auto' | { name: string }
+      debug?: boolean
+    }
     analytics?: {
       trackConversations?: boolean;
       trackActions?: boolean;
@@ -226,6 +235,7 @@ export interface ValidationResult {
     uiConfig: Required<NonNullable<AICopilotConfig['uiConfig']>>;
     security: Required<NonNullable<AICopilotConfig['security']>>;
     performance: Required<NonNullable<AICopilotConfig['performance']>>;
+    toolCalls?: AICopilotConfig['toolCalls'];
     analytics: Required<NonNullable<AICopilotConfig['analytics']>>;
     integrations: Required<NonNullable<AICopilotConfig['integrations']>>;
     features: Required<NonNullable<AICopilotConfig['features']>>;

@@ -66,14 +66,14 @@ export class CustomProvider extends BaseProvider {
             }
         }
     }
-    async sendMessage(messages, systemPrompt) {
+    async sendMessage(messages, systemPrompt, tools, toolChoice, debug) {
         const startTime = Date.now();
         try {
             const endpoint = this.buildEndpoint(this.customConfig.pathTemplate);
             // Transform the request using custom transformer or default
             const requestBody = this.customConfig.requestTransformer
-                ? this.customConfig.requestTransformer(messages, systemPrompt)
-                : this.defaultRequestTransform(messages, systemPrompt);
+                ? this.customConfig.requestTransformer(messages, systemPrompt, false, tools, toolChoice, debug)
+                : this.defaultRequestTransform(messages, systemPrompt, false, tools, toolChoice);
             const response = await this.makeRequest(endpoint, {
                 method: this.customConfig.method || 'POST',
                 headers: this.buildHeaders(),
@@ -94,13 +94,13 @@ export class CustomProvider extends BaseProvider {
             throw new Error(`Custom provider request failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    async sendMessageStream(messages, onChunk, systemPrompt) {
+    async sendMessageStream(messages, onChunk, systemPrompt, tools, toolChoice, debug) {
         const startTime = Date.now();
         try {
             const endpoint = this.buildEndpoint(this.customConfig.pathTemplate);
             const requestBody = this.customConfig.requestTransformer
-                ? this.customConfig.requestTransformer(messages, systemPrompt, true)
-                : this.defaultRequestTransform(messages, systemPrompt, true);
+                ? this.customConfig.requestTransformer(messages, systemPrompt, true, tools, toolChoice, debug)
+                : this.defaultRequestTransform(messages, systemPrompt, true, tools, toolChoice);
             const response = await this.makeRequest(endpoint, {
                 method: this.customConfig.method || 'POST',
                 headers: this.buildHeaders(),
@@ -172,7 +172,7 @@ export class CustomProvider extends BaseProvider {
         return headers;
     }
     // Default transformers for common API formats
-    defaultRequestTransform(messages, systemPrompt, stream = false) {
+    defaultRequestTransform(messages, systemPrompt, stream = false, tools, toolChoice) {
         const requestMessages = [];
         if (systemPrompt) {
             requestMessages.push({
@@ -184,13 +184,17 @@ export class CustomProvider extends BaseProvider {
             role: msg.role,
             content: msg.content
         })));
-        return {
+        const payload = {
             model: this.config.model || 'default',
             messages: requestMessages,
             stream: stream,
             temperature: 0.7,
-            max_tokens: 2048
+            max_tokens: 2048,
+            tools: tools && tools.length ? tools : undefined
         };
+        if (toolChoice)
+            payload.tool_choice = toolChoice;
+        return payload;
     }
     defaultResponseTransform(data) {
         var _a;

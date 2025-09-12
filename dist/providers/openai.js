@@ -106,15 +106,42 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    requestTransformer: (messages, systemPrompt, stream = false) => {
+                    requestTransformer: (messages, systemPrompt, stream = false, tools, toolChoice, debug) => {
                         const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
-                        return {
+                        const mapTools = (t) => {
+                            if (!t || !Array.isArray(t) || t.length === 0)
+                                return undefined;
+                            try {
+                                return t.map((tool) => ({
+                                    type: 'function',
+                                    function: {
+                                        name: String((tool.id || tool.name || 'tool').toString().slice(0, 64)).replace(/[^a-zA-Z0-9_\-]/g, '_'),
+                                        description: tool.description || '',
+                                        parameters: tool.inputSchema || { type: 'object', properties: {} }
+                                    }
+                                }));
+                            }
+                            catch (_a) {
+                                return undefined;
+                            }
+                        };
+                        const payload = {
                             model: config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
                             messages: [...systemMessage, ...messages],
                             stream,
                             temperature: 0.7,
-                            max_tokens: 2000
+                            max_tokens: 2000,
+                            tools: mapTools(tools)
                         };
+                        if (toolChoice)
+                            payload.tool_choice = toolChoice;
+                        if (debug) {
+                            try {
+                                console.debug('[OpenAI][requestTransformer] tools:', payload.tools === null || payload.tools === void 0 ? void 0 : payload.tools.map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }), 'tool_choice:', payload.tool_choice, 'stream:', stream);
+                            }
+                            catch (_b) { }
+                        }
+                        return payload;
                     },
                     responseTransformer: (response) => {
                         var _a, _b, _c;
@@ -137,8 +164,11 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                             };
                             return result;
                         }
+                        if ((_f = (_e = (_d = data.choices) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.delta) === null || _f === void 0 ? void 0 : _f.tool_calls) {
+                            return { content: '', isComplete: false, raw: data };
+                        }
                         // Handle complete response format (message) - fallback for non-streaming
-                        if ((_f = (_e = (_d = data.choices) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.message) === null || _f === void 0 ? void 0 : _f.content) {
+                        if ((_h = (_g = (_f = data.choices) === null || _f === void 0 ? void 0 : _f[0]) === null || _g === void 0 ? void 0 : _g.message) === null || _h === void 0 ? void 0 : _h.content) {
                             const result = {
                                 content: data.choices[0].message.content,
                                 isComplete: true

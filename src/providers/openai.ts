@@ -44,7 +44,7 @@ export const createOpenAIConfig = (options: {
     headers: {
       'Content-Type': 'application/json'
     },
-      requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[]) => {
+      requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, debug?: boolean) => {
         const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
         const mapTools = (t?: any[]) => {
           if (!t || !Array.isArray(t) || t.length === 0) return undefined
@@ -61,7 +61,7 @@ export const createOpenAIConfig = (options: {
             return undefined
           }
         }
-        return {
+        const payload: any = {
           model: options.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
           messages: [...systemMessage, ...messages],
           stream,
@@ -69,6 +69,11 @@ export const createOpenAIConfig = (options: {
           max_tokens: options.maxTokens || 2000,
           tools: mapTools(tools)
         }
+        if (toolChoice) payload.tool_choice = toolChoice
+        if (debug) {
+          try { console.debug('[OpenAI][requestTransformer] tools:', payload.tools?.map((t: any) => t.function?.name), 'tool_choice:', payload.tool_choice, 'stream:', stream) } catch {}
+        }
+        return payload
       },
       responseTransformer: (response: any) => {
         if (response.choices?.[0]?.message?.content) {
@@ -93,6 +98,9 @@ export const createOpenAIConfig = (options: {
           content: data.choices[0].delta.content,
             isComplete: data.choices[0].finish_reason !== null && data.choices[0].finish_reason !== undefined
         }
+      }
+      if (data.choices?.[0]?.delta?.tool_calls) {
+        return { content: '', isComplete: false, raw: data }
       }
         
         if (data.choices?.[0]?.message?.content) {
@@ -141,7 +149,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
           headers: {
             'Content-Type': 'application/json'
           },
-          requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[]) => {
+          requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, debug?: boolean) => {
             const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
             const mapTools = (t?: any[]) => {
               if (!t || !Array.isArray(t) || t.length === 0) return undefined
@@ -158,7 +166,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                 return undefined
               }
             }
-            return {
+            const payload: any = {
               model: config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
               messages: [...systemMessage, ...messages],
               stream,
@@ -166,6 +174,11 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
               max_tokens: 2000,
               tools: mapTools(tools)
             }
+            if (toolChoice) payload.tool_choice = toolChoice
+            if (debug) {
+              try { console.debug('[OpenAI][requestTransformer] tools:', payload.tools?.map((t: any) => t.function?.name), 'tool_choice:', payload.tool_choice, 'stream:', stream) } catch {}
+            }
+            return payload
           },
           responseTransformer: (response: any) => {
             if (response.choices?.[0]?.message) {
@@ -192,6 +205,9 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                 isComplete: data.choices[0].finish_reason !== null && data.choices[0].finish_reason !== undefined
               }
               return result
+            }
+            if (data.choices?.[0]?.delta?.tool_calls) {
+              return { content: '', isComplete: false, raw: data }
             }
             
             // Handle complete response format (message) - fallback for non-streaming
