@@ -39,6 +39,8 @@ export { useMemoryScope } from './hooks/useMemoryScope';
 export { useSecurityPolicy } from './hooks/useSecurityPolicy';
 // Environment Detection Utilities
 export { detectFramework, getApiKey, getDefaultModel, validateEnvironment, detectEnvironment, getEnvVar } from './lib/env';
+// Version helpers
+export { COPILOT_VERSION as COPILOT_LIB_VERSION, COPILOT_COMMIT, getVersion } from './lib/version';
 // Utilities and Constants
 export const COPILOT_VERSION = '1.0.0-phase5';
 // Enterprise utilities

@@ -27,6 +27,7 @@ export { ScrollArea } from './components/ui/scroll_area';
 export { useMemoryScope } from './hooks/useMemoryScope';
 export { useSecurityPolicy } from './hooks/useSecurityPolicy';
 export { detectFramework, getApiKey, getDefaultModel, validateEnvironment, detectEnvironment, getEnvVar } from './lib/env';
+export { COPILOT_VERSION as COPILOT_LIB_VERSION, COPILOT_COMMIT, getVersion } from './lib/version';
 export declare const COPILOT_VERSION = "1.0.0-phase5";
 export declare const createEnterpriseConfig: (baseConfig: any) => any;
 export declare const migrateToPhase5: (legacyConfig: any) => any;

@@ -110,6 +110,9 @@ export {
   getEnvVar 
 } from './lib/env'
 
+// Version helpers
+export { COPILOT_VERSION as COPILOT_LIB_VERSION, COPILOT_COMMIT, getVersion } from './lib/version'
+
 // Utilities and Constants
 export const COPILOT_VERSION = '1.0.0-phase5'
 
