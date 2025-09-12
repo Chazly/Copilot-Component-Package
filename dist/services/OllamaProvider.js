@@ -84,7 +84,7 @@ export class OllamaProvider extends BaseProvider {
             return false;
         }
     }
-    async sendMessage(messages, systemPrompt) {
+    async sendMessage(messages, systemPrompt, tools) {
         const startTime = Date.now();
         try {
             const endpoint = this.buildEndpoint('/api/generate');
@@ -127,7 +127,7 @@ export class OllamaProvider extends BaseProvider {
             throw new Error(`Ollama request failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    async sendMessageStream(messages, onChunk, systemPrompt) {
+    async sendMessageStream(messages, onChunk, systemPrompt, tools) {
         const startTime = Date.now();
         try {
             const endpoint = this.buildEndpoint('/api/generate');

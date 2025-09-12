@@ -1,4 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import React from 'react';
 import { Bot, User, Send } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -159,8 +160,9 @@ function ChatHeader({ title, subtitle, showAvatar, avatarUrl, colors, layout }) 
     const styles = layoutConfig[layout];
     return (_jsxs("header", { className: `flex items-center gap-2 border-b border-gray-200 ${styles.header}`, children: [showAvatar && (_jsx("span", { className: `flex ${styles.avatar} items-center justify-center rounded-full ${colors.headerBg}`, children: avatarUrl ? (_jsx("img", { src: avatarUrl, alt: "Avatar", className: `${styles.avatar} rounded-full object-cover` })) : (_jsx(Bot, { className: `${styles.avatarIcon} text-white` })) })), _jsxs("div", { className: "flex-1", children: [_jsx("h1", { className: `font-semibold text-gray-900 ${layout === 'fullpage' ? 'text-base' : 'text-sm'}`, children: title }), subtitle && (_jsx("p", { className: `text-gray-500 ${layout === 'fullpage' ? 'text-sm' : 'text-xs'}`, children: subtitle }))] })] }));
 }
-function ChatMessages({ messages, isLoading, showAvatar, avatarUrl, colors, layout }) {
+function ChatMessages({ messages, isLoading, showAvatar, avatarUrl, colors, layout, composer }) {
     const styles = layoutConfig[layout];
+    const [selected, setSelected] = React.useState({});
     // Helper function to detect streaming placeholder messages
     const isStreamingPlaceholder = (message) => {
         return message.sender === 'assistant' && message.content === '' && isLoading;
@@ -176,17 +178,87 @@ function ChatMessages({ messages, isLoading, showAvatar, avatarUrl, colors, layo
                                 // Show loading dots inside the message bubble
                                 _jsxs("div", { className: "flex space-x-1", children: [_jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce" }), _jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce", style: { animationDelay: '0.1s' } }), _jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce", style: { animationDelay: '0.2s' } })] })) : (
                                 // Show normal message content
-                                _jsx("div", { className: styles.messageText, dangerouslySetInnerHTML: { __html: processMarkdown(message.content) } })), message.timestamp && (_jsx("div", { className: `${styles.timestampText} opacity-70 mt-1 ${message.sender === 'user' ? 'text-gray-600' : 'text-gray-500'}`, children: message.timestamp.toLocaleTimeString() }))] }), message.sender === 'user' && showAvatar && (_jsx("div", { className: `${styles.avatar} rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0`, children: _jsx(User, { className: `${styles.avatarIcon} text-white` }) }))] }, message.id))), isLoading && !hasStreamingPlaceholder && (_jsxs("div", { className: "flex items-start gap-2 justify-start", children: [showAvatar && (_jsx("div", { className: `${styles.avatar} rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0`, children: avatarUrl ? (_jsx("img", { src: avatarUrl, alt: "Assistant", className: "w-full h-full rounded-full object-cover" })) : (_jsx(Bot, { className: `${styles.avatarIcon} text-gray-600` })) })), _jsx("div", { className: "bg-gray-100 text-gray-900 rounded-lg px-3 py-2", children: _jsxs("div", { className: "flex space-x-1", children: [_jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce" }), _jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce", style: { animationDelay: '0.1s' } }), _jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce", style: { animationDelay: '0.2s' } })] }) })] }))] }) }));
+                                _jsx("div", { className: styles.messageText, dangerouslySetInnerHTML: { __html: processMarkdown(message.content) } })), message.choices && message.choices.length > 0 && (_jsxs("div", { className: "mt-2 flex flex-col gap-2", children: [_jsx("div", { className: "flex flex-wrap gap-2", children: message.choices.map((c) => {
+                                                const isSelected = !!selected[c.key];
+                                                return (_jsxs("button", { "data-choice-key": c.key, className: `text-xs px-2 py-1 border rounded transition ${isSelected ? 'bg-gray-300 border-gray-400' : 'border-gray-300 hover:bg-gray-200'}`, onClick: () => {
+                                                        const allowMulti = !!(composer === null || composer === void 0 ? void 0 : composer.multiSelect);
+                                                        if (allowMulti) {
+                                                            setSelected(prev => {
+                                                                const next = Object.assign({}, prev);
+                                                                const nextVal = !next[c.key];
+                                                                // enforce selection limit if provided
+                                                                const limit = composer === null || composer === void 0 ? void 0 : composer.selectionLimit;
+                                                                if (nextVal && typeof limit === 'number') {
+                                                                    const count = Object.values(next).filter(Boolean).length;
+                                                                    if (count >= limit) {
+                                                                        return prev;
+                                                                    }
+                                                                }
+                                                                next[c.key] = nextVal;
+                                                                return next;
+                                                            });
+                                                            if (composer === null || composer === void 0 ? void 0 : composer.sendOnSelect) {
+                                                                const event = new CustomEvent('copilot-choice-selected', {
+                                                                    detail: { key: c.key, text: c.text }
+                                                                });
+                                                                window.dispatchEvent(event);
+                                                            }
+                                                        }
+                                                        else {
+                                                            const behavior = (composer === null || composer === void 0 ? void 0 : composer.onChoiceSelectBehavior) || 'sendKey';
+                                                            const event = new CustomEvent('copilot-choice-selected', {
+                                                                detail: { key: c.key, text: c.text, behavior }
+                                                            });
+                                                            window.dispatchEvent(event);
+                                                        }
+                                                    }, children: [c.key, ". ", c.text] }, c.key));
+                                            }) }), (composer === null || composer === void 0 ? void 0 : composer.multiSelect) && !(composer === null || composer === void 0 ? void 0 : composer.sendOnSelect) && (_jsx("div", { className: "pt-1", children: _jsx("button", { className: "text-xs px-3 py-1 border border-gray-300 rounded hover:bg-gray-200 transition", onClick: () => {
+                                                    const selectedKeys = Object.entries(selected).filter(([, v]) => v).map(([k]) => k);
+                                                    if (selectedKeys.length === 0)
+                                                        return;
+                                                    const selectedChoices = message.choices.filter((c) => selectedKeys.includes(c.key));
+                                                    const behavior = (composer === null || composer === void 0 ? void 0 : composer.onChoiceSelectBehavior) || 'sendKey';
+                                                    const payload = behavior === 'sendText'
+                                                        ? selectedChoices.map((c) => `${c.key}. ${c.text}`).join(', ')
+                                                        : selectedChoices.map((c) => c.key).join(', ');
+                                                    const event = new CustomEvent('copilot-choice-selected', {
+                                                        detail: { payload }
+                                                    });
+                                                    window.dispatchEvent(event);
+                                                    setSelected({});
+                                                }, children: (composer === null || composer === void 0 ? void 0 : composer.submitLabel) || 'Submit' }) }))] })), message.timestamp && (_jsx("div", { className: `${styles.timestampText} opacity-70 mt-1 ${message.sender === 'user' ? 'text-gray-600' : 'text-gray-500'}`, children: message.timestamp.toLocaleTimeString() }))] }), message.sender === 'user' && showAvatar && (_jsx("div", { className: `${styles.avatar} rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0`, children: _jsx(User, { className: `${styles.avatarIcon} text-white` }) }))] }, message.id))), isLoading && !hasStreamingPlaceholder && (_jsxs("div", { className: "flex items-start gap-2 justify-start", children: [showAvatar && (_jsx("div", { className: `${styles.avatar} rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0`, children: avatarUrl ? (_jsx("img", { src: avatarUrl, alt: "Assistant", className: "w-full h-full rounded-full object-cover" })) : (_jsx(Bot, { className: `${styles.avatarIcon} text-gray-600` })) })), _jsx("div", { className: "bg-gray-100 text-gray-900 rounded-lg px-3 py-2", children: _jsxs("div", { className: "flex space-x-1", children: [_jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce" }), _jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce", style: { animationDelay: '0.1s' } }), _jsx("div", { className: "w-2 h-2 bg-gray-400 rounded-full animate-bounce", style: { animationDelay: '0.2s' } })] }) })] }))] }) }));
 }
 function ChatInput({ input, setInput, sendMsg, isLoading, placeholder, colors, layout }) {
     const styles = layoutConfig[layout];
     return (_jsx("div", { className: `border-t border-gray-200 ${styles.input}`, children: _jsxs("div", { className: "flex gap-2", children: [_jsx(Input, { value: input, onChange: (e) => setInput(e.target.value), placeholder: placeholder, onKeyDown: (e) => e.key === "Enter" && !isLoading && sendMsg(), className: `flex-1 ${styles.inputField}`, disabled: isLoading }), _jsx(Button, { onClick: sendMsg, size: "sm", className: `${styles.button} p-0 ${colors.buttonBg} ${colors.buttonHover}`, disabled: isLoading, children: _jsx(Send, { className: `${styles.avatarIcon}` }) })] }) }));
 }
 // Main CopilotChat Component
-export function CopilotChat({ config, onSendMessage, className }) {
+export function CopilotChat({ config, onSendMessage, className, tools, context, toolContext }) {
+    var _a;
     const { config: normalizedConfig } = useCopilotConfig(config);
     const configProps = getConfigProperties(config);
-    const { messages, input, setInput, sendMsg, isLoading } = useCopilotChat(normalizedConfig, onSendMessage);
+    const { messages, input, setInput, sendMsg, isLoading } = useCopilotChat(normalizedConfig, onSendMessage, { tools, context, toolContext });
+    // Listen for choice selection and auto-send based on config preferences
+    React.useEffect(() => {
+        const handler = (e) => {
+            var _a, _b, _c, _d;
+            const behavior = ((_a = normalizedConfig.uiConfig.composer) === null || _a === void 0 ? void 0 : _a.onChoiceSelectBehavior) || 'sendKey';
+            const key = (_b = e.detail) === null || _b === void 0 ? void 0 : _b.key;
+            const text = (_c = e.detail) === null || _c === void 0 ? void 0 : _c.text;
+            const explicitPayload = (_d = e.detail) === null || _d === void 0 ? void 0 : _d.payload;
+            if (!explicitPayload && !key && !text)
+                return;
+            const payload = explicitPayload || (behavior === 'sendText' ? `${key}. ${text}` : key);
+            setInput(payload);
+            setTimeout(() => {
+                const inputEl = document.activeElement;
+                // ensure send fires with current state; rely on sendMsg using state
+                sendMsg();
+            }, 0);
+        };
+        window.addEventListener('copilot-choice-selected', handler);
+        return () => window.removeEventListener('copilot-choice-selected', handler);
+    }, [(_a = normalizedConfig.uiConfig.composer) === null || _a === void 0 ? void 0 : _a.onChoiceSelectBehavior, setInput, sendMsg]);
     // Show deprecation warning for legacy config in development
     if (isLegacyCopilotConfig(config) && (process.env.NODE_ENV === 'development' || typeof window !== 'undefined')) {
         console.warn('CopilotChat: Using legacy CopilotConfig. Consider migrating to AICopilotConfig for advanced features.');

@@ -1,11 +1,28 @@
-import { Message, NormalizedCopilotConfig } from '../types';
-export declare function useCopilotChat(config: NormalizedCopilotConfig, onSendMessage?: (message: string) => Promise<string> | string): {
+import { Message, NormalizedCopilotConfig, RuntimeTool } from '../types';
+export declare function useCopilotChat(config: NormalizedCopilotConfig, onSendMessage?: (message: string) => Promise<string> | string, options?: {
+    tools?: RuntimeTool[];
+    context?: string | (() => Promise<string> | string);
+    toolContext?: {
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    } | (() => Promise<{
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    } | undefined> | {
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    });
+}): {
     messages: Message[];
     input: string;
     setInput: import("react").Dispatch<import("react").SetStateAction<string>>;
     sendMsg: () => Promise<void>;
     sendMsgStream: () => Promise<void>;
     isLoading: boolean;
+    callRuntimeTool: (tool: RuntimeTool, parameters: any) => Promise<any>;
     providerStatus: {
         isReady: boolean;
         currentProvider: string | undefined;

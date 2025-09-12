@@ -25,8 +25,8 @@ export declare function useModelProvider(config: NormalizedCopilotConfig): {
     initializeProviders: () => Promise<void>;
     switchProvider: (providerName: string) => Promise<boolean>;
     refreshProviderHealth: () => Promise<void>;
-    sendMessage: (messages: ChatMessage[], systemPrompt?: string) => Promise<ChatResponse>;
-    sendMessageStream: (messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string) => Promise<void>;
+    sendMessage: (messages: ChatMessage[], systemPrompt?: string, tools?: any[], toolChoice?: any, debug?: boolean) => Promise<ChatResponse>;
+    sendMessageStream: (messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string, tools?: any[], toolChoice?: any, debug?: boolean) => Promise<void>;
     isReady: boolean;
     capabilities: import("../services/BaseProvider").ProviderCapabilities | undefined;
     metrics: {

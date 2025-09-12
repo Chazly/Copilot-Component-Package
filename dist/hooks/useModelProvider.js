@@ -206,12 +206,13 @@ export function useModelProvider(config) {
         return () => clearInterval(interval);
     }, [state.currentProvider, refreshProviderHealth]);
     // Provider wrapper methods
-    const sendMessage = useCallback(async (messages, systemPrompt) => {
+    const sendMessage = useCallback(async (messages, systemPrompt, tools, toolChoice, debug) => {
         if (!state.currentProvider) {
             throw new Error('No provider available');
         }
         try {
-            return await state.currentProvider.sendMessage(messages, systemPrompt);
+            // pass through optional args when provider supports them (CustomProvider accepts and ignores extras)
+            return await state.currentProvider.sendMessage(messages, systemPrompt, tools, toolChoice, debug);
         }
         catch (error) {
             // Refresh health status and potentially switch providers
@@ -219,12 +220,12 @@ export function useModelProvider(config) {
             throw error;
         }
     }, [state.currentProvider, refreshProviderHealth]);
-    const sendMessageStream = useCallback(async (messages, onChunk, systemPrompt) => {
+    const sendMessageStream = useCallback(async (messages, onChunk, systemPrompt, tools, toolChoice, debug) => {
         if (!state.currentProvider) {
             throw new Error('No provider available');
         }
         try {
-            return await state.currentProvider.sendMessageStream(messages, onChunk, systemPrompt);
+            return await state.currentProvider.sendMessageStream(messages, onChunk, systemPrompt, tools, toolChoice, debug);
         }
         catch (error) {
             // Refresh health status and potentially switch providers

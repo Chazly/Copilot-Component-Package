@@ -29,8 +29,8 @@ export declare class OllamaProvider extends BaseProvider {
     checkHealth(): Promise<boolean>;
     loadAvailableModels(): Promise<OllamaModel[]>;
     pullModel(modelName: string): Promise<boolean>;
-    sendMessage(messages: ChatMessage[], systemPrompt?: string): Promise<ChatResponse>;
-    sendMessageStream(messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string): Promise<void>;
+    sendMessage(messages: ChatMessage[], systemPrompt?: string, tools?: any[]): Promise<ChatResponse>;
+    sendMessageStream(messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string, tools?: any[]): Promise<void>;
     private formatMessagesForOllama;
     switchModel(modelName: string): Promise<boolean>;
     getAvailableModels(): OllamaModel[];

@@ -36,42 +36,88 @@ export const createOpenAIConfig = (options = {}) => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            requestTransformer: (messages, systemPrompt, stream = false) => {
+            requestTransformer: (messages, systemPrompt, stream = false, tools, toolChoice, debug) => {
+                var _a;
                 const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
-                return {
+                const mapTools = (t) => {
+                    if (!t || !Array.isArray(t) || t.length === 0)
+                        return undefined;
+                    try {
+                        return t.map((tool) => ({
+                            type: 'function',
+                            function: {
+                                name: String((tool.id || tool.name || 'tool').toString().slice(0, 64)).replace(/[^a-zA-Z0-9_\-]/g, '_'),
+                                description: tool.description || '',
+                                parameters: tool.inputSchema || { type: 'object', properties: {} }
+                            }
+                        }));
+                    }
+                    catch (_a) {
+                        return undefined;
+                    }
+                };
+                const payload = {
                     model: options.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest',
                     messages: [...systemMessage, ...messages],
                     stream,
                     temperature: options.temperature || 0.7,
-                    max_tokens: options.maxTokens || 2000
+                    max_tokens: options.maxTokens || 2000,
+                    tools: mapTools(tools)
                 };
+                if (toolChoice)
+                    payload.tool_choice = toolChoice;
+                if (debug) {
+                    try {
+                        console.debug('[OpenAI][requestTransformer] tools:', (_a = payload.tools) === null || _a === void 0 ? void 0 : _a.map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }), 'tool_choice:', payload.tool_choice, 'stream:', stream);
+                    }
+                    catch (_b) { }
+                }
+                return payload;
             },
             responseTransformer: (response) => {
                 var _a, _b, _c;
                 if ((_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) {
+                    const msg = response.choices[0].message;
+                    const toolCalls = (msg.tool_calls || []).map((tc) => {
+                        var _a;
+                        return ({
+                            id: tc.id,
+                            name: (_a = tc.function) === null || _a === void 0 ? void 0 : _a.name,
+                            arguments: (() => { var _a; try {
+                                return JSON.parse(((_a = tc.function) === null || _a === void 0 ? void 0 : _a.arguments) || '{}');
+                            }
+                            catch (_b) {
+                                return {};
+                            } })()
+                        });
+                    });
                     return {
-                        content: response.choices[0].message.content,
+                        content: msg.content,
                         finishReason: response.choices[0].finish_reason,
-                        usage: response.usage
+                        usage: response.usage,
+                        metadata: toolCalls.length ? { toolCalls } : undefined
                     };
                 }
                 throw new Error('Invalid OpenAI response format');
             },
             streamTransformer: (data) => {
-                var _a, _b, _c, _d, _e, _f, _g, _h;
+                var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
                 if ((_c = (_b = (_a = data.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.delta) === null || _c === void 0 ? void 0 : _c.content) {
                     return {
                         content: data.choices[0].delta.content,
                         isComplete: data.choices[0].finish_reason !== null && data.choices[0].finish_reason !== undefined
                     };
                 }
-                if ((_f = (_e = (_d = data.choices) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.message) === null || _f === void 0 ? void 0 : _f.content) {
+                if ((_f = (_e = (_d = data.choices) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.delta) === null || _f === void 0 ? void 0 : _f.tool_calls) {
+                    return { content: '', isComplete: false, raw: data };
+                }
+                if ((_j = (_h = (_g = data.choices) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.message) === null || _j === void 0 ? void 0 : _j.content) {
                     return {
                         content: data.choices[0].message.content,
                         isComplete: true
                     };
                 }
-                if ((_h = (_g = data.choices) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.finish_reason) {
+                if ((_l = (_k = data.choices) === null || _k === void 0 ? void 0 : _k[0]) === null || _l === void 0 ? void 0 : _l.finish_reason) {
                     return {
                         content: '',
                         isComplete: true
@@ -107,6 +153,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                         'Content-Type': 'application/json'
                     },
                     requestTransformer: (messages, systemPrompt, stream = false, tools, toolChoice, debug) => {
+                        var _a;
                         const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
                         const mapTools = (t) => {
                             if (!t || !Array.isArray(t) || t.length === 0)
@@ -137,25 +184,40 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                             payload.tool_choice = toolChoice;
                         if (debug) {
                             try {
-                                console.debug('[OpenAI][requestTransformer] tools:', payload.tools === null || payload.tools === void 0 ? void 0 : payload.tools.map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }), 'tool_choice:', payload.tool_choice, 'stream:', stream);
+                                console.debug('[OpenAI][requestTransformer] tools:', (_a = payload.tools) === null || _a === void 0 ? void 0 : _a.map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }), 'tool_choice:', payload.tool_choice, 'stream:', stream);
                             }
                             catch (_b) { }
                         }
                         return payload;
                     },
                     responseTransformer: (response) => {
-                        var _a, _b, _c;
-                        if ((_c = (_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) {
+                        var _a, _b;
+                        if ((_b = (_a = response.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) {
+                            const msg = response.choices[0].message;
+                            const toolCalls = (msg.tool_calls || []).map((tc) => {
+                                var _a;
+                                return ({
+                                    id: tc.id,
+                                    name: (_a = tc.function) === null || _a === void 0 ? void 0 : _a.name,
+                                    arguments: (() => { var _a; try {
+                                        return JSON.parse(((_a = tc.function) === null || _a === void 0 ? void 0 : _a.arguments) || '{}');
+                                    }
+                                    catch (_b) {
+                                        return {};
+                                    } })()
+                                });
+                            });
                             return {
-                                content: response.choices[0].message.content,
+                                content: msg.content || '',
                                 finishReason: response.choices[0].finish_reason,
-                                usage: response.usage
+                                usage: response.usage,
+                                metadata: toolCalls.length ? { toolCalls } : undefined
                             };
                         }
                         throw new Error('Invalid OpenAI response format');
                     },
                     streamTransformer: (data) => {
-                        var _a, _b, _c, _d, _e, _f, _g, _h;
+                        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
                         // Handle streaming format (delta) - this is correct for streaming
                         if ((_c = (_b = (_a = data.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.delta) === null || _c === void 0 ? void 0 : _c.content) {
                             const result = {
@@ -168,7 +230,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                             return { content: '', isComplete: false, raw: data };
                         }
                         // Handle complete response format (message) - fallback for non-streaming
-                        if ((_h = (_g = (_f = data.choices) === null || _f === void 0 ? void 0 : _f[0]) === null || _g === void 0 ? void 0 : _g.message) === null || _h === void 0 ? void 0 : _h.content) {
+                        if ((_j = (_h = (_g = data.choices) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.message) === null || _j === void 0 ? void 0 : _j.content) {
                             const result = {
                                 content: data.choices[0].message.content,
                                 isComplete: true
@@ -176,7 +238,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                             return result;
                         }
                         // Handle completion signals  
-                        if ((_h = (_g = data.choices) === null || _g === void 0 ? void 0 : _g[0]) === null || _h === void 0 ? void 0 : _h.finish_reason) {
+                        if ((_l = (_k = data.choices) === null || _k === void 0 ? void 0 : _k[0]) === null || _l === void 0 ? void 0 : _l.finish_reason) {
                             const result = {
                                 content: '',
                                 isComplete: true

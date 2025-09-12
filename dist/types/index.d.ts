@@ -1,8 +1,23 @@
+export interface ChoiceOption {
+    key: string;
+    text: string;
+}
 export interface Message {
     id: string;
     content: string;
     sender: "user" | "assistant";
     timestamp: Date;
+    choices?: ChoiceOption[];
+}
+export type JSONSchema = any;
+export interface RuntimeTool {
+    id: string;
+    name: string;
+    description?: string;
+    inputSchema: JSONSchema;
+    outputSchema?: JSONSchema;
+    route: string;
+    transport?: 'http' | 'sse';
 }
 export type FrameworkType = 'nextjs' | 'vite' | 'nuxt' | 'sveltekit' | 'remix' | 'astro' | 'unknown';
 export interface EnvironmentConfig {
@@ -73,6 +88,14 @@ export interface AICopilotConfig {
         showAvatar?: boolean;
         floatingButton?: boolean;
         layout?: "chatbox" | "sidebar" | "fullpage";
+        composer?: {
+            supportedElements?: ("choices" | string)[];
+            onChoiceSelectBehavior?: "sendKey" | "sendText";
+            multiSelect?: boolean;
+            selectionLimit?: number;
+            submitLabel?: string;
+            sendOnSelect?: boolean;
+        };
     };
     security?: {
         dataRetention?: number;
@@ -90,6 +113,17 @@ export interface AICopilotConfig {
             ttl: number;
         };
         streamingEnabled?: boolean;
+    };
+    toolCalls?: {
+        streaming?: {
+            enabled: boolean;
+        };
+        route?: string;
+        transport?: 'http' | 'sse';
+        toolChoice?: 'auto' | {
+            name: string;
+        };
+        debug?: boolean;
     };
     analytics?: {
         trackConversations?: boolean;
@@ -163,6 +197,7 @@ export interface NormalizedCopilotConfig {
     uiConfig: Required<NonNullable<AICopilotConfig['uiConfig']>>;
     security: Required<NonNullable<AICopilotConfig['security']>>;
     performance: Required<NonNullable<AICopilotConfig['performance']>>;
+    toolCalls?: AICopilotConfig['toolCalls'];
     analytics: Required<NonNullable<AICopilotConfig['analytics']>>;
     integrations: Required<NonNullable<AICopilotConfig['integrations']>>;
     features: Required<NonNullable<AICopilotConfig['features']>>;
@@ -175,6 +210,21 @@ export interface CopilotChatProps {
     config: CopilotConfigType;
     onSendMessage?: (message: string) => Promise<string> | string;
     className?: string;
+    tools?: RuntimeTool[];
+    context?: string | (() => Promise<string> | string);
+    toolContext?: {
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    } | (() => Promise<{
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    } | undefined> | {
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    });
 }
 export interface ResizableLayoutProps {
     leftPanel: any;
@@ -190,6 +240,17 @@ export interface CopilotContextValue {
     updateConfig: (newConfig: Partial<AICopilotConfig>) => void;
     resetConfig: () => void;
     isReady: boolean;
+    runtimeTools?: RuntimeTool[];
+    getContext?: () => Promise<string> | string;
+    getToolContext?: () => Promise<{
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    } | undefined> | {
+        businessId?: string;
+        userId?: string;
+        sessionId?: string;
+    };
 }
 export interface EnterpriseSecurityConfig {
     enabled: boolean;

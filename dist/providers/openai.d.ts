@@ -52,21 +52,23 @@ export declare const createOpenAIConfig: (options?: {
         headers: {
             'Content-Type': string;
         };
-        requestTransformer: (messages: any[], systemPrompt?: string, stream?: boolean) => {
-            model: string;
-            messages: any[];
-            stream: boolean;
-            temperature: number;
-            max_tokens: number;
-        };
+        requestTransformer: (messages: any[], systemPrompt?: string, stream?: boolean, tools?: any[], toolChoice?: any, debug?: boolean) => any;
         responseTransformer: (response: any) => {
             content: any;
             finishReason: any;
             usage: any;
+            metadata: {
+                toolCalls: any;
+            } | undefined;
         };
         streamTransformer: (data: any) => {
             content: any;
             isComplete: boolean;
+            raw?: undefined;
+        } | {
+            content: string;
+            isComplete: boolean;
+            raw: any;
         } | null;
     };
 };

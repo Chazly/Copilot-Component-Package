@@ -57,6 +57,7 @@ export interface StreamChunk {
     content: string;
     isComplete: boolean;
     usage?: ChatResponse['usage'];
+    raw?: any;
 }
 export declare abstract class BaseProvider {
     protected config: ProviderConfig;
@@ -65,8 +66,8 @@ export declare abstract class BaseProvider {
     abstract get name(): string;
     abstract get capabilities(): ProviderCapabilities;
     abstract authenticate(): Promise<boolean>;
-    abstract sendMessage(messages: ChatMessage[], systemPrompt?: string): Promise<ChatResponse>;
-    abstract sendMessageStream(messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string): Promise<void>;
+    abstract sendMessage(messages: ChatMessage[], systemPrompt?: string, tools?: any[]): Promise<ChatResponse>;
+    abstract sendMessageStream(messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string, tools?: any[]): Promise<void>;
     abstract validateConfig(): boolean;
     abstract checkHealth(): Promise<boolean>;
     protected makeRequest(endpoint: string, options: RequestInit): Promise<Response>;

@@ -1,7 +1,7 @@
 import { BaseProvider, ProviderConfig, ProviderCapabilities, ChatMessage, ChatResponse, StreamChunk } from './BaseProvider';
 export interface CustomProviderConfig extends ProviderConfig {
     customConfig?: {
-        requestTransformer?: (messages: ChatMessage[], systemPrompt?: string, stream?: boolean) => any;
+        requestTransformer?: (messages: ChatMessage[], systemPrompt?: string, stream?: boolean, tools?: any[], toolChoice?: any, debug?: boolean) => any;
         responseTransformer?: (response: any) => ChatResponse;
         streamTransformer?: (chunk: any) => StreamChunk | null;
         headers?: Record<string, string>;
@@ -26,8 +26,8 @@ export declare class CustomProvider extends BaseProvider {
     authenticate(): Promise<boolean>;
     validateConfig(): boolean;
     checkHealth(): Promise<boolean>;
-    sendMessage(messages: ChatMessage[], systemPrompt?: string): Promise<ChatResponse>;
-    sendMessageStream(messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string): Promise<void>;
+    sendMessage(messages: ChatMessage[], systemPrompt?: string, tools?: any[], toolChoice?: any, debug?: boolean): Promise<ChatResponse>;
+    sendMessageStream(messages: ChatMessage[], onChunk: (chunk: StreamChunk) => void, systemPrompt?: string, tools?: any[], toolChoice?: any, debug?: boolean): Promise<void>;
     private buildHeaders;
     private defaultRequestTransform;
     private defaultResponseTransform;
