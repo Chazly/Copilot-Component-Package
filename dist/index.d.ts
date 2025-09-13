@@ -37,3 +37,14 @@ export declare const validatePhase5Config: (config: any) => {
     warnings: string[];
     recommendations: string[];
 };
+export * from './agent/types';
+export * from './agent/logger';
+export { CopilotAgent } from './agent/CopilotAgent';
+export { asTool, createOrchestratorConfig } from './agent/orchestrate';
+export { AgentUIRegistry } from './components/agent-ui-registry';
+export { AgentChatUI } from './components/AgentChatUI';
+export { AgentEnabledCopilot } from './components/AgentEnabledCopilot';
+export { AgentCopilotChat } from './components/AgentCopilotChat';
+export { createPaymentTools } from './tools/payment';
+export { createCommunicationTools } from './tools/communications';
+import './components/agent-ui-default-register';

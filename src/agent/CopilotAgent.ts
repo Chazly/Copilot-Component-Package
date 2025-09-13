@@ -162,7 +162,11 @@ export class CopilotAgent {
   }
 
   protected toProviderMessages(latest?: Message): ChatMessage[] {
-    const base = this.history.map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.content, timestamp: m.timestamp }))
+    const base: ChatMessage[] = this.history.map(m => ({
+      role: (m.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.content,
+      timestamp: m.timestamp
+    }))
     if (latest) base.push({ role: 'user', content: latest.content, timestamp: latest.timestamp })
     return base
   }
