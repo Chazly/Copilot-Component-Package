@@ -7,6 +7,7 @@ import { useCopilotChat } from '../hooks/useCopilotChat'
 import { useCopilotConfig } from '../hooks/useCopilotConfig'
 import { CopilotChatProps, CopilotColor, isAICopilotConfig, isLegacyCopilotConfig } from '../types'
 import { processMarkdown } from '../lib/utils'
+import { getVersion } from '../lib/version'
 
 const colorConfig: Record<CopilotColor, {
   headerBg: string
@@ -428,6 +429,12 @@ function ChatInput({ input, setInput, sendMsg, isLoading, placeholder, colors, l
 
 // Main CopilotChat Component
 export function CopilotChat({ config, onSendMessage, className, tools, context, toolContext }: CopilotChatProps) {
+  React.useEffect(() => {
+    try {
+      const v = getVersion()
+      console.log(`[CopilotPackage] version: ${v.commit}`)
+    } catch {}
+  }, [])
   const { config: normalizedConfig } = useCopilotConfig(config)
   const configProps = getConfigProperties(config)
   const { messages, input, setInput, sendMsg, isLoading } = useCopilotChat(normalizedConfig, onSendMessage, { tools, context, toolContext })
