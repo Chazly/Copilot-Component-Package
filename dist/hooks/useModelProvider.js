@@ -4,6 +4,7 @@ import { getApiKeyWithConfig } from '../lib/env';
 // Import and register providers
 import '../services/OllamaProvider';
 import '../services/CustomProvider';
+import '../providers/openai';
 // Convert copilot config to provider config
 function configToProviderConfig(config) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;

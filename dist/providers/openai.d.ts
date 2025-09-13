@@ -51,6 +51,7 @@ export declare const createOpenAIConfig: (options?: {
         method: string;
         headers: {
             'Content-Type': string;
+            'x-copilot-openai-path': string;
         };
         requestTransformer: (messages: any[], systemPrompt?: string, stream?: boolean, tools?: any[], toolChoice?: any, _debug?: boolean) => any;
         responseTransformer: (response: any) => {

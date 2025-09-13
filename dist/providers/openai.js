@@ -38,7 +38,8 @@ export const createOpenAIConfig = (options = {}) => {
             pathTemplate: '/v1/chat/completions',
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'x-copilot-openai-path': 'chat'
             },
             requestTransformer: (messages, systemPrompt, stream = false, tools, toolChoice, _debug) => {
                 const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
@@ -154,7 +155,8 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
                     pathTemplate: '/v1/chat/completions',
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'x-copilot-openai-path': 'chat'
                     },
                     requestTransformer: (messages, systemPrompt, stream = false, tools, toolChoice, _debug) => {
                         const pathTemplate = '/v1/chat/completions';

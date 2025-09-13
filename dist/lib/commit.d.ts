@@ -1,1 +1,1 @@
-export declare const PKG_COMMIT = "11cc534";
+export declare const PKG_COMMIT = "fe24750";

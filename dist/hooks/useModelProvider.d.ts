@@ -2,6 +2,7 @@ import { BaseProvider, ChatMessage, ChatResponse, StreamChunk } from '../service
 import { NormalizedCopilotConfig } from '../types';
 import '../services/OllamaProvider';
 import '../services/CustomProvider';
+import '../providers/openai';
 export interface ProviderStatus {
     name: string;
     isAvailable: boolean;

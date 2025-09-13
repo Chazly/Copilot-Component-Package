@@ -13,6 +13,7 @@ import { getApiKey, getApiKeyWithConfig } from '../lib/env'
 // Import and register providers
 import '../services/OllamaProvider'
 import '../services/CustomProvider'
+import '../providers/openai'
 
 export interface ProviderStatus {
   name: string
