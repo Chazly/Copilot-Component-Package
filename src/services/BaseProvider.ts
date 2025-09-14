@@ -142,7 +142,15 @@ export abstract class BaseProvider {
   }
   
   protected buildEndpoint(path: string): string {
-    const baseURL = this.config.baseURL || this.config.localConfig?.endpoint || 'localhost'
+    let baseURL = this.config.baseURL || this.config.localConfig?.endpoint || 'localhost'
+    // Enforce proxy in browser contexts for OpenAI
+    try {
+      const isBrowser = typeof window !== 'undefined'
+      if (isBrowser && /api\.openai\.com/.test(String(baseURL))) {
+        // Next.js recommended proxy path
+        baseURL = '/api/openai'
+      }
+    } catch {}
     const port = this.config.localConfig?.port
     
     let url: string

@@ -1,4 +1,5 @@
 import { BaseProvider, ProviderRegistry } from './BaseProvider';
+import { ProviderHttpError } from './errors';
 export class CustomProvider extends BaseProvider {
     constructor(config) {
         super(config);
@@ -67,9 +68,14 @@ export class CustomProvider extends BaseProvider {
         }
     }
     async sendMessage(messages, systemPrompt, tools, toolChoice, debug) {
+        var _a, _b, _c, _d, _e, _f;
         const startTime = Date.now();
         try {
             const endpoint = this.buildEndpoint(this.customConfig.pathTemplate);
+            try {
+                (_b = (_a = console).debug) === null || _b === void 0 ? void 0 : _b.call(_a, '[obs]', { event: 'model_request', endpoint, model: this.config.model, path: this.customConfig.pathTemplate });
+            }
+            catch (_g) { }
             // Transform the request using custom transformer or default
             const requestBody = this.customConfig.requestTransformer
                 ? this.customConfig.requestTransformer(messages, systemPrompt, false, tools, toolChoice, debug)
@@ -79,7 +85,21 @@ export class CustomProvider extends BaseProvider {
                 headers: this.buildHeaders(),
                 body: JSON.stringify(requestBody)
             });
-            const data = await response.json();
+            const text = await response.text();
+            let data;
+            try {
+                data = text ? JSON.parse(text) : {};
+            }
+            catch (_h) {
+                data = text;
+            }
+            if (!response.ok && response.status >= 400 && response.status < 500) {
+                try {
+                    (_d = (_c = console).error) === null || _d === void 0 ? void 0 : _d.call(_c, '[obs]', { event: 'model_error', status: response.status, endpoint, model: this.config.model });
+                }
+                catch (_j) { }
+                throw new ProviderHttpError(`Upstream 4xx from provider`, { status: response.status, endpoint, model: this.config.model, body: data, pathType: ((_e = this.customConfig.pathTemplate) === null || _e === void 0 ? void 0 : _e.includes('responses')) ? 'responses' : (((_f = this.customConfig.pathTemplate) === null || _f === void 0 ? void 0 : _f.includes('chat')) ? 'chat' : 'other') });
+            }
             // Transform the response using custom transformer or default
             const chatResponse = this.customConfig.responseTransformer
                 ? this.customConfig.responseTransformer(data)
@@ -91,13 +111,18 @@ export class CustomProvider extends BaseProvider {
         catch (error) {
             const latency = Date.now() - startTime;
             this.recordMetrics(latency, true);
-            throw new Error(`Custom provider request failed: ${error instanceof Error ? error.message : String(error)}`);
+            throw error instanceof Error ? error : new Error(`Custom provider request failed: ${String(error)}`);
         }
     }
     async sendMessageStream(messages, onChunk, systemPrompt, tools, toolChoice, debug) {
+        var _a, _b;
         const startTime = Date.now();
         try {
             const endpoint = this.buildEndpoint(this.customConfig.pathTemplate);
+            try {
+                (_b = (_a = console).debug) === null || _b === void 0 ? void 0 : _b.call(_a, '[obs]', { event: 'model_request', endpoint, model: this.config.model, path: this.customConfig.pathTemplate, stream: true });
+            }
+            catch (_c) { }
             const requestBody = this.customConfig.requestTransformer
                 ? this.customConfig.requestTransformer(messages, systemPrompt, true, tools, toolChoice, debug)
                 : this.defaultRequestTransform(messages, systemPrompt, true, tools, toolChoice);
@@ -155,7 +180,7 @@ export class CustomProvider extends BaseProvider {
         catch (error) {
             const latency = Date.now() - startTime;
             this.recordMetrics(latency, true);
-            throw new Error(`Custom provider streaming failed: ${error instanceof Error ? error.message : String(error)}`);
+            throw error instanceof Error ? error : new Error(`Custom provider streaming failed: ${String(error)}`);
         }
     }
     buildHeaders() {

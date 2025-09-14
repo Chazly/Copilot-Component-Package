@@ -4,6 +4,13 @@
 
 Phase 6 focuses entirely on **Developer Experience (DX)** improvements, making the copilot framework significantly easier to use, understand, and maintain. This phase introduces powerful builder patterns, enhanced validation, seamless migration utilities, and comprehensive type safety improvements.
 
+In addition, this release includes orchestration improvements:
+- Delegation Briefs and Hooks (preDelegate, briefFormatter) to seed child first messages deterministically and avoid provider 400s.
+- Routing Policy to force tool_choice per turn when matchers have high confidence; parallel children disabled by default.
+- Model/Path Resolver for OpenAI (Chat vs Responses) with automatic `/api/openai` proxy routing in browser contexts.
+- Observability events (delegate_start/end, tool_invoke/result, model_request/error) with correlationId and optional redaction.
+- MCP helpers for SSE aggregation and standard tool result envelopes.
+
 ## 🚀 What's New in Phase 6
 
 ### 1. **Enhanced Type Exports** - Clear, Accessible Types

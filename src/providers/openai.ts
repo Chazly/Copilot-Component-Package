@@ -70,10 +70,14 @@ export const createOpenAIConfig = (options: {
         }
 
         const modelId = options.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest'
-        const path = '/v1/chat/completions'
+        const isResponses = /^(gpt-4\.1|o1-|gpt-4o-mini-.*responses)$/i.test(modelId) || false
+        const path = isResponses ? '/v1/responses' : '/v1/chat/completions'
         const payload: any = {
           model: modelId,
-          messages: [...systemMessage, ...messages],
+          ...(isResponses ? { input: [
+            ...systemMessage.length ? [{ role: 'system', content: systemPrompt }] : [],
+            ...messages
+          ].map((m: any) => `(${m.role}) ${m.content}`).join('\n') } : { messages: [...systemMessage, ...messages] }),
           stream,
           temperature: options.temperature || 0.7,
           max_tokens: options.maxTokens || 2000,
@@ -81,7 +85,7 @@ export const createOpenAIConfig = (options: {
         }
         if (toolChoice) payload.tool_choice = toolChoice
         try {
-          console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t: any) => t.function?.name).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:chat }`)
+          console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t: any) => t.function?.name).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:${isResponses ? 'responses' : 'chat'} }`)
           console.log(`[CopilotPackage] version: ${COPILOT_COMMIT}`)
         } catch {}
         return payload
@@ -152,14 +156,28 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
   ProviderRegistry.register({
     name: 'openai',
     factory: (config) => {
+      const getEnvVar = (key: string): string | undefined => {
+        if (typeof window !== 'undefined') {
+          const viteKey = `VITE_${key}`
+          const nextKey = `NEXT_PUBLIC_${key}`
+          return (import.meta as any).env?.[viteKey] || 
+                 (window as any).process?.env?.[nextKey] ||
+                 (window as any).process?.env?.[key] ||
+                 (import.meta as any).env?.[key]
+        }
+        return (process.env as any)[key]
+      }
+      const modelId = config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest'
+      const isResponses = /^(gpt-4\.1|o1-|gpt-4o-mini-.*responses)$/i.test(modelId)
+      const pathTemplate = isResponses ? '/v1/responses' : '/v1/chat/completions'
       return new CustomProvider({
         ...config,
         customConfig: {
-          pathTemplate: '/v1/chat/completions',
+          pathTemplate,
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-copilot-openai-path': 'chat'
+            'x-copilot-openai-path': isResponses ? 'responses' : 'chat'
           },
           requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, _debug?: boolean) => {
             const pathTemplate = '/v1/chat/completions'

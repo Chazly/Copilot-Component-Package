@@ -27,10 +27,44 @@ export interface AgentConfig {
 
   context?: ContextSource
   contextFormatter?: (ctx: ContextObject) => string
+  briefFormatter?: (ctx: DelegationContext) => string
 
   ui_to_use?: string
   logger?: AgentLogger
   debug?: boolean
+
+  // Optional routing policy applied when deciding tool_choice
+  routingPolicy?: RoutingPolicy
+
+  // Observability options
+  observability?: ObservabilityOptions
+}
+
+export type DelegationContext = {
+  parentMessages: Array<{ role: 'user' | 'assistant'; content: string; timestamp?: Date }>
+  lastUserMessage?: string
+  chosenChildName: string
+  businessId?: string
+  sessionId?: string
+  userId?: string
+  constraints?: 'read' | 'crud'
+  childTools?: RuntimeTool[]
+}
+
+export type PreDelegateHook = (ctx: DelegationContext) => string | Promise<string>
+
+export type RoutingPolicy = {
+  allowParallelChildren?: boolean
+  rules: Array<{
+    match: (input: { text: string; history: Array<{ role: 'user' | 'assistant'; content: string }> }) => boolean
+    forceTool?: { name: string; hard?: boolean }
+  }>
+}
+
+export type ObservabilityOptions = {
+  correlationId?: string
+  redact?: (data: any) => any
+  includeBriefInDebugLogs?: boolean
 }
 
 

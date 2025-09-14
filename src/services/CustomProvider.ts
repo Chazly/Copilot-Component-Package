@@ -7,6 +7,7 @@ import {
   StreamChunk,
   ProviderRegistry
 } from './BaseProvider'
+import { ProviderHttpError } from './errors'
 
 export interface CustomProviderConfig extends ProviderConfig {
   customConfig?: {
@@ -117,6 +118,7 @@ export class CustomProvider extends BaseProvider {
     
     try {
       const endpoint = this.buildEndpoint(this.customConfig.pathTemplate!)
+      try { (console as any).debug?.('[obs]', { event: 'model_request', endpoint, model: this.config.model, path: this.customConfig.pathTemplate }) } catch {}
       
       // Transform the request using custom transformer or default
       const requestBody = this.customConfig.requestTransformer 
@@ -129,7 +131,13 @@ export class CustomProvider extends BaseProvider {
         body: JSON.stringify(requestBody)
       })
       
-      const data = await response.json()
+      const text = await response.text()
+      let data: any
+      try { data = text ? JSON.parse(text) : {} } catch { data = text }
+      if (!response.ok && response.status >= 400 && response.status < 500) {
+        try { (console as any).error?.('[obs]', { event: 'model_error', status: response.status, endpoint, model: this.config.model }) } catch {}
+        throw new ProviderHttpError(`Upstream 4xx from provider`, { status: response.status, endpoint, model: this.config.model, body: data, pathType: this.customConfig.pathTemplate?.includes('responses') ? 'responses' : (this.customConfig.pathTemplate?.includes('chat') ? 'chat' : 'other') })
+      }
       
       // Transform the response using custom transformer or default
       const chatResponse = this.customConfig.responseTransformer
@@ -145,7 +153,7 @@ export class CustomProvider extends BaseProvider {
       const latency = Date.now() - startTime
       this.recordMetrics(latency, true)
       
-      throw new Error(`Custom provider request failed: ${error instanceof Error ? error.message : String(error)}`)
+      throw error instanceof Error ? error : new Error(`Custom provider request failed: ${String(error)}`)
     }
   }
   
@@ -161,6 +169,7 @@ export class CustomProvider extends BaseProvider {
     
     try {
       const endpoint = this.buildEndpoint(this.customConfig.pathTemplate!)
+      try { (console as any).debug?.('[obs]', { event: 'model_request', endpoint, model: this.config.model, path: this.customConfig.pathTemplate, stream: true }) } catch {}
       
       const requestBody = this.customConfig.requestTransformer 
         ? this.customConfig.requestTransformer(messages, systemPrompt, true, tools, toolChoice, debug)
@@ -230,7 +239,7 @@ export class CustomProvider extends BaseProvider {
       const latency = Date.now() - startTime
       this.recordMetrics(latency, true)
       
-      throw new Error(`Custom provider streaming failed: ${error instanceof Error ? error.message : String(error)}`)
+      throw error instanceof Error ? error : new Error(`Custom provider streaming failed: ${String(error)}`)
     }
   }
   

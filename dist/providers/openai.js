@@ -61,19 +61,16 @@ export const createOpenAIConfig = (options = {}) => {
                     }
                 };
                 const modelId = options.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest';
-                const path = '/v1/chat/completions';
-                const payload = {
-                    model: modelId,
-                    messages: [...systemMessage, ...messages],
-                    stream,
-                    temperature: options.temperature || 0.7,
-                    max_tokens: options.maxTokens || 2000,
-                    tools: mapTools(tools)
-                };
+                const isResponses = /^(gpt-4\.1|o1-|gpt-4o-mini-.*responses)$/i.test(modelId) || false;
+                const path = isResponses ? '/v1/responses' : '/v1/chat/completions';
+                const payload = Object.assign(Object.assign({ model: modelId }, (isResponses ? { input: [
+                        ...systemMessage.length ? [{ role: 'system', content: systemPrompt }] : [],
+                        ...messages
+                    ].map((m) => `(${m.role}) ${m.content}`).join('\n') } : { messages: [...systemMessage, ...messages] })), { stream, temperature: options.temperature || 0.7, max_tokens: options.maxTokens || 2000, tools: mapTools(tools) });
                 if (toolChoice)
                     payload.tool_choice = toolChoice;
                 try {
-                    console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:chat }`);
+                    console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:${isResponses ? 'responses' : 'chat'} }`);
                     console.log(`[CopilotPackage] version: ${COPILOT_COMMIT}`);
                 }
                 catch (_a) { }
@@ -151,12 +148,27 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
     ProviderRegistry.register({
         name: 'openai',
         factory: (config) => {
+            const getEnvVar = (key) => {
+                var _a, _b, _c, _d, _e, _f;
+                if (typeof window !== 'undefined') {
+                    const viteKey = `VITE_${key}`;
+                    const nextKey = `NEXT_PUBLIC_${key}`;
+                    return ((_a = import.meta.env) === null || _a === void 0 ? void 0 : _a[viteKey]) ||
+                        ((_c = (_b = window.process) === null || _b === void 0 ? void 0 : _b.env) === null || _c === void 0 ? void 0 : _c[nextKey]) ||
+                        ((_e = (_d = window.process) === null || _d === void 0 ? void 0 : _d.env) === null || _e === void 0 ? void 0 : _e[key]) ||
+                        ((_f = import.meta.env) === null || _f === void 0 ? void 0 : _f[key]);
+                }
+                return process.env[key];
+            };
+            const modelId = config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest';
+            const isResponses = /^(gpt-4\.1|o1-|gpt-4o-mini-.*responses)$/i.test(modelId);
+            const pathTemplate = isResponses ? '/v1/responses' : '/v1/chat/completions';
             return new CustomProvider(Object.assign(Object.assign({}, config), { customConfig: {
-                    pathTemplate: '/v1/chat/completions',
+                    pathTemplate,
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'x-copilot-openai-path': 'chat'
+                        'x-copilot-openai-path': isResponses ? 'responses' : 'chat'
                     },
                     requestTransformer: (messages, systemPrompt, stream = false, tools, toolChoice, _debug) => {
                         const pathTemplate = '/v1/chat/completions';

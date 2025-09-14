@@ -1,4 +1,5 @@
 import { ConsoleLogger } from './logger';
+import { emitEvent } from '../lib/observability';
 export class CopilotAgent {
     constructor(provider, normalizedConfig, agentConfig) {
         this.listeners = {};
@@ -28,7 +29,8 @@ export class CopilotAgent {
         const t0 = Date.now();
         try {
             this.log.info('send', { len: content.length });
-            const resp = await this.provider.sendMessage(this.toProviderMessages(user), await this.resolveSystemPrompt(), this.tools, this.toToolChoice(opts === null || opts === void 0 ? void 0 : opts.toolChoice), !!this.agentCfg.debug);
+            const resolvedToolChoice = this.resolveToolChoice(content, this.history);
+            const resp = await this.provider.sendMessage(this.toProviderMessages(user), await this.resolveSystemPrompt(), this.tools, this.toToolChoice((opts === null || opts === void 0 ? void 0 : opts.toolChoice) || resolvedToolChoice), !!this.agentCfg.debug);
             await this.handleToolCalls((_a = resp === null || resp === void 0 ? void 0 : resp.metadata) === null || _a === void 0 ? void 0 : _a.toolCalls);
             this.push({ id: crypto.randomUUID(), content: (resp === null || resp === void 0 ? void 0 : resp.content) || '', sender: 'assistant', timestamp: new Date() });
             this.log.debug('send:ok', { ms: Date.now() - t0 });
@@ -94,12 +96,24 @@ export class CopilotAgent {
                     return {};
                 } })();
                 this.log.debug('tool_invoke', { key, args });
+                try {
+                    emitEvent('tool_invoke', this.agentCfg, { key, args });
+                }
+                catch (_b) { }
                 const result = await runner(args);
                 const content = typeof result === 'string' ? result : '```json\n' + JSON.stringify(result, null, 2) + '\n```';
                 this.push({ id: crypto.randomUUID(), content, sender: 'assistant', timestamp: new Date() });
+                try {
+                    emitEvent('tool_result', this.agentCfg, { key, ok: true });
+                }
+                catch (_c) { }
             }
             catch (e) {
                 this.log.error('tool_error', e);
+                try {
+                    emitEvent('tool_result', this.agentCfg, { key, ok: false, error: e instanceof Error ? e.message : String(e) });
+                }
+                catch (_d) { }
                 this.push({ id: crypto.randomUUID(), content: `Tool '${key}' failed.`, sender: 'assistant', timestamp: new Date() });
             }
         }
@@ -164,6 +178,46 @@ export class CopilotAgent {
         if (!choice || choice === 'auto')
             return 'auto';
         return { type: 'function', function: { name: String(choice.name).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_') } };
+    }
+    // Seed or reset the first assistant message for delegation briefs
+    seedFirstAssistant(brief, opts) {
+        const nonEmptyBrief = String(brief || '').trim();
+        if (!nonEmptyBrief)
+            return;
+        const reset = !!(opts === null || opts === void 0 ? void 0 : opts.reset);
+        const first = this.history.find(m => m.sender === 'assistant');
+        if (reset) {
+            const seeded = { id: crypto.randomUUID(), content: nonEmptyBrief, sender: 'assistant', timestamp: new Date() };
+            const userTail = this.history.filter(m => m.sender === 'user');
+            this.history = [seeded, ...userTail];
+            this.emit('message', seeded);
+            return;
+        }
+        if (!first || !String(first.content || '').trim()) {
+            const seeded = { id: crypto.randomUUID(), content: nonEmptyBrief, sender: 'assistant', timestamp: new Date() };
+            this.push(seeded);
+            return;
+        }
+    }
+    // Apply routing policy to compute tool choice if confidence is high
+    resolveToolChoice(latestUserText, history) {
+        var _a;
+        const policy = this.agentCfg.routingPolicy;
+        if (!policy || !policy.rules || policy.rules.length === 0)
+            return 'auto';
+        try {
+            const input = {
+                text: latestUserText,
+                history: history.map(m => ({ role: (m.sender === 'user' ? 'user' : 'assistant'), content: m.content }))
+            };
+            for (const r of policy.rules) {
+                if (r.match(input) && ((_a = r.forceTool) === null || _a === void 0 ? void 0 : _a.name)) {
+                    return { name: r.forceTool.name };
+                }
+            }
+        }
+        catch (_b) { }
+        return 'auto';
     }
     push(msg) { this.history = [...this.history, msg]; this.emit('message', msg); }
     append(id, delta) {

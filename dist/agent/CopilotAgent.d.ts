@@ -50,6 +50,12 @@ export declare class CopilotAgent {
             name: string;
         };
     };
+    seedFirstAssistant(brief: string, opts?: {
+        reset?: boolean;
+    }): void;
+    protected resolveToolChoice(latestUserText: string, history: Message[]): 'auto' | {
+        name: string;
+    };
     protected push(msg: Message): void;
     protected append(id: string, delta: string): void;
     protected replace(id: string, content: string): void;

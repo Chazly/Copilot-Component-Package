@@ -2,6 +2,7 @@ import type { BaseProvider, ChatMessage, StreamChunk } from '../services/BasePro
 import type { NormalizedCopilotConfig, Message, RuntimeTool } from '../types'
 import type { AgentConfig, SystemPrompt, ContextObject } from './types'
 import { ConsoleLogger } from './logger'
+import { emitEvent } from '../lib/observability'
 
 type AgentEvents = {
   message: (msg: Message) => void
@@ -46,11 +47,12 @@ export class CopilotAgent {
 
     try {
       this.log.info('send', { len: content.length })
+      const resolvedToolChoice = this.resolveToolChoice(content, this.history)
       const resp = await (this.provider as any).sendMessage(
         this.toProviderMessages(user),
         await this.resolveSystemPrompt(),
         this.tools,
-        this.toToolChoice(opts?.toolChoice),
+        this.toToolChoice(opts?.toolChoice || resolvedToolChoice),
         !!this.agentCfg.debug
       )
       await this.handleToolCalls(resp?.metadata?.toolCalls)
@@ -109,11 +111,14 @@ export class CopilotAgent {
       try {
         const args = typeof call.arguments === 'object' ? call.arguments : (() => { try { return JSON.parse(call.arguments || '{}') } catch { return {} } })()
         this.log.debug('tool_invoke', { key, args })
+        try { emitEvent('tool_invoke', this.agentCfg, { key, args }) } catch {}
         const result = await runner(args)
         const content = typeof result === 'string' ? result : '```json\n' + JSON.stringify(result, null, 2) + '\n```'
         this.push({ id: crypto.randomUUID(), content, sender: 'assistant', timestamp: new Date() })
+        try { emitEvent('tool_result', this.agentCfg, { key, ok: true }) } catch {}
       } catch (e) {
         this.log.error('tool_error', e as any)
+        try { emitEvent('tool_result', this.agentCfg, { key, ok: false, error: e instanceof Error ? e.message : String(e) }) } catch {}
         this.push({ id: crypto.randomUUID(), content: `Tool '${key}' failed.`, sender: 'assistant', timestamp: new Date() })
       }
     }
@@ -174,6 +179,44 @@ export class CopilotAgent {
   protected toToolChoice(choice?: 'auto' | { name: string }) {
     if (!choice || choice === 'auto') return 'auto'
     return { type: 'function', function: { name: String(choice.name).slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_') } }
+  }
+
+  // Seed or reset the first assistant message for delegation briefs
+  public seedFirstAssistant(brief: string, opts?: { reset?: boolean }) {
+    const nonEmptyBrief = String(brief || '').trim()
+    if (!nonEmptyBrief) return
+    const reset = !!opts?.reset
+    const first = this.history.find(m => m.sender === 'assistant')
+    if (reset) {
+      const seeded = { id: crypto.randomUUID(), content: nonEmptyBrief, sender: 'assistant' as const, timestamp: new Date() }
+      const userTail = this.history.filter(m => m.sender === 'user')
+      this.history = [seeded, ...userTail]
+      this.emit('message', seeded)
+      return
+    }
+    if (!first || !String(first.content || '').trim()) {
+      const seeded = { id: crypto.randomUUID(), content: nonEmptyBrief, sender: 'assistant' as const, timestamp: new Date() }
+      this.push(seeded)
+      return
+    }
+  }
+
+  // Apply routing policy to compute tool choice if confidence is high
+  protected resolveToolChoice(latestUserText: string, history: Message[]): 'auto' | { name: string } {
+    const policy = this.agentCfg.routingPolicy
+    if (!policy || !policy.rules || policy.rules.length === 0) return 'auto'
+    try {
+      const input: { text: string; history: Array<{ role: 'user' | 'assistant'; content: string }> } = {
+        text: latestUserText,
+        history: history.map(m => ({ role: (m.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }))
+      }
+      for (const r of policy.rules) {
+        if (r.match(input) && r.forceTool?.name) {
+          return { name: r.forceTool.name }
+        }
+      }
+    } catch {}
+    return 'auto'
   }
 
   protected push(msg: Message) { this.history = [...this.history, msg]; this.emit('message', msg) }

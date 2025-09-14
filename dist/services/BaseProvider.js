@@ -48,7 +48,16 @@ export class BaseProvider {
     }
     buildEndpoint(path) {
         var _a, _b, _c;
-        const baseURL = this.config.baseURL || ((_a = this.config.localConfig) === null || _a === void 0 ? void 0 : _a.endpoint) || 'localhost';
+        let baseURL = this.config.baseURL || ((_a = this.config.localConfig) === null || _a === void 0 ? void 0 : _a.endpoint) || 'localhost';
+        // Enforce proxy in browser contexts for OpenAI
+        try {
+            const isBrowser = typeof window !== 'undefined';
+            if (isBrowser && /api\.openai\.com/.test(String(baseURL))) {
+                // Next.js recommended proxy path
+                baseURL = '/api/openai';
+            }
+        }
+        catch (_d) { }
         const port = (_b = this.config.localConfig) === null || _b === void 0 ? void 0 : _b.port;
         let url;
         // Check if baseURL already contains a protocol (like https://api.openai.com)
