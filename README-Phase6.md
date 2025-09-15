@@ -56,6 +56,12 @@ const orchestrator = createOrchestratorConfig({ ...masterCfg, toolRunners: runne
 - All model traffic goes through `/api/openai` in browsers; HTTPS is enforced.
 - Chat vs Responses API auto-selected by model.
 
+### Environment consolidation
+
+- Use `NEXT_PUBLIC_COPILOT_MODEL_PROVIDER` and `NEXT_PUBLIC_COPILOT_MODEL_NAME` to select provider/model in browsers.
+- Set `OPENAI_API_KEY` (server or build-time) for the OpenAI proxy.
+- After changing env vars in hosted environments, prefer “Clear cache & deploy” (or equivalent) to ensure the proxy/config refreshes across edge/server.
+
 ### Testing
 
 - Use the E2E kit (mock MCP endpoint) to validate: a single tool turn, continuation to assistant text, and shared correlationId across events.
