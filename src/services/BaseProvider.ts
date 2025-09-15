@@ -151,6 +151,12 @@ export abstract class BaseProvider {
         baseURL = '/api/openai'
       }
     } catch {}
+    // Ensure HTTPS for browsers
+    if (typeof window !== 'undefined' && typeof baseURL === 'string') {
+      if (baseURL.startsWith('http://')) {
+        baseURL = baseURL.replace('http://', 'https://')
+      }
+    }
     const port = this.config.localConfig?.port
     
     let url: string

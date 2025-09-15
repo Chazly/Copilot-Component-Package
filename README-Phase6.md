@@ -1,3 +1,64 @@
+## Delegation + MCP Example (Business Gating)
+
+This release adds reliable master→child delegation with post-tool continuation and MCP tool routing via `/api/mcp/tools/call`.
+
+Key points:
+- Post-tool continuation guarantees an assistant string; fallback to normalized JSON code block if needed.
+- Context injection via `toolContextProvider` enforces `businessId`; missing business shows a surfaced error.
+- Deterministic routing via `buildRoutingPolicy()`; dry-run logs available.
+- Observability includes `delegate_*`, `tool_*`, `model_*`, `continuation_*`, and `fallback_json_used` with shared `correlationId`.
+
+### Quick start
+
+1. Configure the master agent:
+
+```ts
+import { CopilotAgent, createOrchestratorConfig } from './src'
+import { buildRoutingPolicy, createMcpRunner, wrapToolRunners, resultToText } from './src'
+
+const toolContextProvider = async () => ({ businessId: 'biz_123', sessionId: 'sess_1', userId: 'user_42' })
+
+const masterCfg = {
+  name: 'Master',
+  system_prompts: ['You are the master orchestrator.'],
+  routingPolicy: buildRoutingPolicy([
+    { crud: 'read', resource: /goals|operational goals/i, forceTool: { name: 'Operations' } }
+  ], { dryRun: true }),
+  toolContextProvider,
+  observability: { correlationId: 'dev-session-1' },
+  postDelegate: ({ text }) => text
+}
+```
+
+2. Create children and orchestrator config, ensuring runners are wrapped:
+
+```ts
+const ops = new CopilotAgent(provider, normalized, { name: 'Operations', system_prompts: ['Be concise.'] })
+const strat = new CopilotAgent(provider, normalized, { name: 'Strategy', system_prompts: ['Be direct.'] })
+
+const mcpRun = createMcpRunner({ contextProvider: toolContextProvider })
+const runners = wrapToolRunners({
+  runners: { list_goals: (args) => mcpRun('list_goals', args) },
+  contextProvider: toolContextProvider,
+  normalize: (v) => resultToText(v)
+})
+
+const orchestrator = createOrchestratorConfig({ ...masterCfg, toolRunners: runners }, [
+  { name: 'Operations', agent: ops },
+  { name: 'Strategy', agent: strat }
+])
+```
+
+3. UI renders the master agent; child delegates return strings that are appended automatically.
+
+### Proxy and Models
+
+- All model traffic goes through `/api/openai` in browsers; HTTPS is enforced.
+- Chat vs Responses API auto-selected by model.
+
+### Testing
+
+- Use the E2E kit (mock MCP endpoint) to validate: a single tool turn, continuation to assistant text, and shared correlationId across events.
 # Phase 6: Developer Experience
 
 **Copilot Package v1.0.0-phase6**

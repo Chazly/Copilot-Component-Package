@@ -25,6 +25,14 @@ export interface RuntimeTool {
   transport?: 'http' | 'sse'
 }
 
+// Typed tool generics: enforce input/output typing at compile time
+export type TypedTool<TInput, TOutput> = Omit<RuntimeTool, 'inputSchema' | 'outputSchema'> & {
+  inputSchema: JSONSchema
+  outputSchema?: JSONSchema
+}
+
+export type TypedToolRunner<TInput, TOutput> = (args: TInput) => Promise<TOutput>
+
 // Environment detection types - Framework-agnostic environment handling
 export type FrameworkType = 'nextjs' | 'vite' | 'nuxt' | 'sveltekit' | 'remix' | 'astro' | 'unknown'
 

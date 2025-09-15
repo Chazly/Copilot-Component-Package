@@ -124,6 +124,10 @@ export class CustomProvider extends BaseProvider {
       const requestBody = this.customConfig.requestTransformer 
         ? this.customConfig.requestTransformer(messages, systemPrompt, false, tools, toolChoice, debug)
         : this.defaultRequestTransform(messages, systemPrompt, false, tools, toolChoice)
+      // Respect explicit tool_choice 'none': do not inject tools
+      if (requestBody && requestBody.tool_choice && requestBody.tool_choice.type === 'none') {
+        delete requestBody.tools
+      }
       
       const response = await this.makeRequest(endpoint, {
         method: this.customConfig.method || 'POST',
@@ -294,6 +298,7 @@ export class CustomProvider extends BaseProvider {
       tools: tools && tools.length ? tools : undefined
     }
     if (toolChoice) payload.tool_choice = toolChoice
+    if (toolChoice && toolChoice.type === 'none') delete payload.tools
     return payload
   }
   

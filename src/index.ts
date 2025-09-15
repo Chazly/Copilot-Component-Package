@@ -115,6 +115,7 @@ export { COPILOT_VERSION as COPILOT_LIB_VERSION, COPILOT_COMMIT, getVersion } fr
 
 // Utilities and Constants
 export const COPILOT_VERSION = '1.0.0-phase5'
+export * from './lib'
 
 // Enterprise utilities
 export const createEnterpriseConfig = (baseConfig: any) => ({

@@ -180,7 +180,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
             'x-copilot-openai-path': isResponses ? 'responses' : 'chat'
           },
           requestTransformer: (messages: any[], systemPrompt?: string, stream = false, tools?: any[], toolChoice?: any, _debug?: boolean) => {
-            const pathTemplate = '/v1/chat/completions'
+            const localPathTemplate = isResponses ? '/v1/responses' : '/v1/chat/completions'
             const systemMessage = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
             const mapTools = (t?: any[]) => {
               if (!t || !Array.isArray(t) || t.length === 0) return undefined
@@ -200,9 +200,9 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
 
             const modelId = config.model || getEnvVar('OPENAI_DEFAULT_MODEL') || getEnvVar('VITE_OPENAI_DEFAULT_MODEL') || 'gpt-4o-latest'
             // Support both Chat Completions and Responses APIs
-            const isResponses = String(pathTemplate).endsWith('/v1/responses') || String(config.baseURL || '').endsWith('/v1/responses')
+            const localIsResponses = String(localPathTemplate).endsWith('/v1/responses') || String(config.baseURL || '').endsWith('/v1/responses')
             let payload: any
-            if (isResponses) {
+            if (localIsResponses) {
               // Minimal Responses API payload
               // Flatten messages to a single input string while preserving system prompt
               const text = [systemPrompt ? `(system) ${systemPrompt}` : '', ...messages.map((m: any) => `(${m.role}) ${m.content}`)].filter(Boolean).join('\n')
@@ -225,7 +225,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
               if (toolChoice) payload.tool_choice = toolChoice
             }
             try {
-              console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t: any) => t.function?.name).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:${isResponses ? 'responses' : 'chat'} }`)
+              console.log(`[OpenAI][requestTransformer] { tools:[${(payload.tools || []).map((t: any) => t.function?.name).join(',')}], tool_choice:${JSON.stringify(payload.tool_choice) || 'undefined'}, stream:${Boolean(stream)}, model:${modelId}, path:${localIsResponses ? 'responses' : 'chat'} }`)
               console.log(`[CopilotPackage] version: ${COPILOT_COMMIT}`)
             } catch {}
             return payload

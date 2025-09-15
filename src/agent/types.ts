@@ -25,9 +25,13 @@ export interface AgentConfig {
   tools?: RuntimeTool[]
   toolRunners?: Record<string, (args: any) => Promise<any>>
 
+  // Provide context for tool runners (e.g., business gating)
+  toolContextProvider?: () => Promise<{ businessId?: string; sessionId?: string; userId?: string } | undefined>
+
   context?: ContextSource
   contextFormatter?: (ctx: ContextObject) => string
   briefFormatter?: (ctx: DelegationContext) => string
+  postDelegate?: (result: { childName: string; text: string; context: DelegationContext }) => string | Promise<string>
 
   ui_to_use?: string
   logger?: AgentLogger
@@ -38,6 +42,13 @@ export interface AgentConfig {
 
   // Observability options
   observability?: ObservabilityOptions
+
+  // Post-tool continuation policy
+  continuation?: {
+    prompt?: string
+    maxTokens?: number
+    maxLen?: number
+  }
 }
 
 export type DelegationContext = {
@@ -55,6 +66,7 @@ export type PreDelegateHook = (ctx: DelegationContext) => string | Promise<strin
 
 export type RoutingPolicy = {
   allowParallelChildren?: boolean
+  dryRun?: boolean
   rules: Array<{
     match: (input: { text: string; history: Array<{ role: 'user' | 'assistant'; content: string }> }) => boolean
     forceTool?: { name: string; hard?: boolean }

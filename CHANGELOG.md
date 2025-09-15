@@ -1,3 +1,11 @@
+- feat: Reliable delegation with post-tool continuation and guaranteed assistant text
+- feat: resultToText normalization and JSON code block fallback
+- feat: Business-gated context injection via toolContextProvider
+- feat: MCP runner with SSE aggregation and ok()/fail() envelopes
+- feat: Routing policy DSL with CRUD/resource matchers and dry-run logs
+- feat: Observability events with correlationId across delegate/tool/continuation
+- feat: Enforce /api/openai HTTPS proxy; auto Chat vs Responses selection
+- feat: postDelegate hook and non-empty transcript guarantees
 ### 1.1.0
 
 - Added preDelegate hook and briefFormatter to seed child agents with a deterministic delegation brief

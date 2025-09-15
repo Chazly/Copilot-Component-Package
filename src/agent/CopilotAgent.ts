@@ -3,6 +3,7 @@ import type { NormalizedCopilotConfig, Message, RuntimeTool } from '../types'
 import type { AgentConfig, SystemPrompt, ContextObject } from './types'
 import { ConsoleLogger } from './logger'
 import { emitEvent } from '../lib/observability'
+import { resultToText } from '../lib/result'
 
 type AgentEvents = {
   message: (msg: Message) => void
@@ -44,10 +45,12 @@ export class CopilotAgent {
     this.push(user)
     this.emit('loading', true)
     const t0 = Date.now()
+    const correlationId = crypto.randomUUID()
 
     try {
       this.log.info('send', { len: content.length })
       const resolvedToolChoice = this.resolveToolChoice(content, this.history)
+      try { emitEvent('model_request', this.agentCfg, { correlationId, toolChoice: resolvedToolChoice }) } catch {}
       const resp = await (this.provider as any).sendMessage(
         this.toProviderMessages(user),
         await this.resolveSystemPrompt(),
@@ -55,11 +58,16 @@ export class CopilotAgent {
         this.toToolChoice(opts?.toolChoice || resolvedToolChoice),
         !!this.agentCfg.debug
       )
-      await this.handleToolCalls(resp?.metadata?.toolCalls)
-      this.push({ id: crypto.randomUUID(), content: resp?.content || '', sender: 'assistant', timestamp: new Date() })
+      const hadTools = Array.isArray(resp?.metadata?.toolCalls) && resp.metadata.toolCalls.length > 0
+      await this.handleToolCalls(resp?.metadata?.toolCalls, correlationId)
+      if (!hadTools) {
+        const c = String(resp?.content || '').trim()
+        if (c) this.push({ id: crypto.randomUUID(), content: c, sender: 'assistant', timestamp: new Date() })
+      }
       this.log.debug('send:ok', { ms: Date.now() - t0 })
     } catch (e: any) {
       this.log.error('send:fail', e)
+      try { emitEvent('model_error', this.agentCfg, { correlationId, error: e instanceof Error ? e.message : String(e) }) } catch {}
       this.emit('error', e)
       this.push({ id: crypto.randomUUID(), content: this.cfg.fallbackMessage, sender: 'assistant', timestamp: new Date() })
     } finally {
@@ -101,9 +109,16 @@ export class CopilotAgent {
     }
   }
 
-  protected async handleToolCalls(toolCalls?: Array<{ id?: string; name?: string; arguments?: any }>) {
+  protected async handleToolCalls(toolCalls?: Array<{ id?: string; name?: string; arguments?: any }>, correlationId?: string) {
     if (!toolCalls || !toolCalls.length) return
     this.log.info('tool_calls', toolCalls.map(t => t.name))
+    // Resolve runner context once per batch
+    const toolCtx = this.agentCfg.toolContextProvider ? await this.agentCfg.toolContextProvider() : undefined
+    if (!toolCtx?.businessId) {
+      const msg = 'Select a business to continue'
+      this.push({ id: crypto.randomUUID(), content: msg, sender: 'assistant', timestamp: new Date() })
+      return
+    }
     for (const call of toolCalls) {
       const key = String(call.name || '').slice(0, 64).replace(/[^a-zA-Z0-9_\-]/g, '_')
       const runner = this.agentCfg.toolRunners?.[key]
@@ -111,14 +126,31 @@ export class CopilotAgent {
       try {
         const args = typeof call.arguments === 'object' ? call.arguments : (() => { try { return JSON.parse(call.arguments || '{}') } catch { return {} } })()
         this.log.debug('tool_invoke', { key, args })
-        try { emitEvent('tool_invoke', this.agentCfg, { key, args }) } catch {}
-        const result = await runner(args)
-        const content = typeof result === 'string' ? result : '```json\n' + JSON.stringify(result, null, 2) + '\n```'
-        this.push({ id: crypto.randomUUID(), content, sender: 'assistant', timestamp: new Date() })
-        try { emitEvent('tool_result', this.agentCfg, { key, ok: true }) } catch {}
+        try { emitEvent('tool_invoke', this.agentCfg, { correlationId, key, args }) } catch {}
+        // Inject minimal context into args if not present
+        const result = await runner({ ...args, __context: { businessId: toolCtx.businessId, sessionId: toolCtx.sessionId, userId: toolCtx.userId } })
+        const normalized = resultToText(result, { onFallback: () => { try { emitEvent('fallback_json_used', this.agentCfg, { key }) } catch {} } })
+        // Inject tool result as assistant content for model context
+        this.push({ id: crypto.randomUUID(), content: normalized, sender: 'assistant', timestamp: new Date() })
+        try { emitEvent('tool_result', this.agentCfg, { correlationId, key, ok: true }) } catch {}
+
+        // Post-tool single continuation: force tool_choice none, no streaming
+        try { emitEvent('continuation_start', this.agentCfg, { correlationId, key }) } catch {}
+        const cont = await (this.provider as any).sendMessage(
+          this.toProviderMessages(),
+          await this.resolveSystemPrompt(),
+          this.tools,
+          { type: 'none' },
+          !!this.agentCfg.debug
+        )
+        // If continuation still returns tool_calls, fall back to normalized tool result
+        const contHasToolCalls = !!cont?.metadata?.toolCalls?.length
+        const finalText = contHasToolCalls ? normalized : (cont?.content || normalized)
+        this.push({ id: crypto.randomUUID(), content: finalText || 'Operation completed with no additional details.', sender: 'assistant', timestamp: new Date() })
+        try { emitEvent('continuation_end', this.agentCfg, { correlationId, key, contHasToolCalls }) } catch {}
       } catch (e) {
         this.log.error('tool_error', e as any)
-        try { emitEvent('tool_result', this.agentCfg, { key, ok: false, error: e instanceof Error ? e.message : String(e) }) } catch {}
+        try { emitEvent('tool_result', this.agentCfg, { correlationId, key, ok: false, error: e instanceof Error ? e.message : String(e) }) } catch {}
         this.push({ id: crypto.randomUUID(), content: `Tool '${key}' failed.`, sender: 'assistant', timestamp: new Date() })
       }
     }
@@ -210,8 +242,12 @@ export class CopilotAgent {
         text: latestUserText,
         history: history.map(m => ({ role: (m.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant', content: m.content }))
       }
-      for (const r of policy.rules) {
-        if (r.match(input) && r.forceTool?.name) {
+      for (let idx = 0; idx < policy.rules.length; idx++) {
+        const r = policy.rules[idx]
+        const matched = !!r.match(input)
+        if (policy.dryRun) this.log.debug('routing_rule', { idx, matched, forceTool: r.forceTool?.name })
+        if (matched && r.forceTool?.name) {
+          if (policy.dryRun) this.log.debug('routing_selected', { tool: r.forceTool.name })
           return { name: r.forceTool.name }
         }
       }
